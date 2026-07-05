@@ -1,0 +1,66 @@
+import { useState } from "react";
+import { ParkingCircle, AlertCircle, LogIn, Loader2 } from "lucide-react";
+import { api, ApiError } from "../api";
+
+export default function Login({ onLoggedIn }) {
+  const [username, setUsername] = useState("insp01");
+  const [password, setPassword] = useState("pass123");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await api.login(username, password);
+      onLoggedIn(res.inspector, res.token);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setError("帳號或密碼錯誤");
+      } else {
+        setError("無法連線到後端 API，請確認後端服務已啟動 (http://localhost:8000)");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 380, width: "100%" }}>
+      <div className="card-icon-heading">
+        <span className="icon-badge">
+          <ParkingCircle size={20} />
+        </span>
+        <div>
+          <h1 style={{ fontSize: 19 }}>停車單稽查 APP</h1>
+        </div>
+      </div>
+      <p className="muted small" style={{ marginTop: -8 }}>稽查員登入</p>
+      <form onSubmit={handleSubmit}>
+        <label>
+          帳號
+          <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+        </label>
+        <label>
+          密碼
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        {error && (
+          <div className="error-box">
+            <AlertCircle size={16} />
+            <span>{error}</span>
+          </div>
+        )}
+        <button className="btn-primary btn-block" type="submit" disabled={loading}>
+          {loading ? <Loader2 size={16} className="spin-icon" /> : <LogIn size={16} />}
+          {loading ? "登入中…" : "登入"}
+        </button>
+      </form>
+      <p className="hint">
+        Demo 帳號：<code>insp01</code> / <code>pass123</code>（有稽查權限）、
+        <code>insp02</code> / <code>pass123</code>（無稽查權限，示範無權限流程）
+      </p>
+    </div>
+  );
+}

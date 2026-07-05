@@ -1,0 +1,37 @@
+# Runs the whole prototype (inspector app + admin console + API) with:
+#   cd prototype
+#   docker compose up --build
+#
+# Then open:
+#   http://localhost:8080/        - inspector app  (insp01 / pass123)
+#   http://localhost:8080/admin   - admin console  (admin01 / admin123)
+#
+# The frontend container (nginx) proxies /api/ and /uploads/ to the backend
+# container, so the browser only ever talks to port 8080. The backend is
+# also published on 8000 directly, which is handy for curling the API or
+# hitting http://localhost:8000/docs (FastAPI's interactive API docs).
+#
+# Data (SQLite DB + uploaded photos) persists in the `parking_data` named
+# volume across restarts. Run `docker compose down -v` to wipe it and start
+# fresh with just the seed data.
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - parking_data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  parking_data:

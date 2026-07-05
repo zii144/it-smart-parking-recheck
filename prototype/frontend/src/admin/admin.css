@@ -1,0 +1,305 @@
+/* Admin-console-only styles, layered on top of the shared design tokens
+   and component classes in ../styles.css. */
+
+.app-switch-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  justify-content: center;
+  width: 100%;
+}
+
+/* ---------- Tabs ---------- */
+
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 20px 0;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  position: sticky;
+  top: 62px;
+  z-index: 15;
+}
+
+.admin-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 10px 14px;
+  color: var(--color-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-tab:hover {
+  color: var(--color-ink);
+  background: var(--color-bg);
+}
+
+.admin-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.admin-main {
+  max-width: 880px;
+}
+
+/* ---------- Stat cards ---------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  text-align: center;
+}
+
+.stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--color-ink);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 4px;
+}
+
+/* ---------- Chart breakdowns ---------- */
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.chart-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px 6px;
+}
+
+.chart-card h3 {
+  font-size: 13px;
+  color: var(--color-muted);
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: center;
+  margin: 4px 0 10px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-ink);
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ---------- Filter bar ---------- */
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 14px 0 18px;
+  padding: 14px;
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+}
+
+.filter-bar label {
+  margin-bottom: 0;
+  min-width: 150px;
+}
+
+.filter-bar button {
+  height: 42px;
+}
+
+/* ---------- Inline forms (accounts / locations) ---------- */
+
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.inline-form label {
+  min-width: 140px;
+  margin-bottom: 0;
+}
+
+.inline-form .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: auto;
+}
+
+.inline-form .checkbox-label input {
+  width: auto;
+  margin: 0;
+}
+
+.inline-form button {
+  height: 42px;
+}
+
+.inline-form .error-box {
+  width: 100%;
+  margin: 0;
+}
+
+/* ---------- Case detail modal (larger variant) ---------- */
+
+.modal-card-lg {
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.modal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.modal-card-header h2 {
+  margin: 0;
+}
+
+.btn-icon-only {
+  padding: 6px;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* ---------- Review form ---------- */
+
+.review-form {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.review-form h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+.outcome-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.outcome-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.outcome-tile:hover {
+  border-color: var(--color-primary);
+}
+
+.outcome-tile.selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  margin-top: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+@media (max-width: 700px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .outcome-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-bar,
+  .inline-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-bar label,
+  .inline-form label {
+    min-width: 0;
+  }
+}
