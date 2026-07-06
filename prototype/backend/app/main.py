@@ -134,6 +134,8 @@ class CaseCreateRequest(BaseModel):
     district: str
     road: str
     spot_no: str
+    gps_lat: Optional[float] = None
+    gps_lng: Optional[float] = None
     plate_no: str
     amount: float
     due_date: str
@@ -402,6 +404,8 @@ def create_case(
         district=payload.district,
         road=payload.road,
         spot_no=payload.spot_no,
+        gps_lat=payload.gps_lat,
+        gps_lng=payload.gps_lng,
         plate_no=payload.plate_no,
         amount=payload.amount,
         due_date=payload.due_date,
@@ -613,7 +617,8 @@ def admin_stats(
 
 
 CSV_COLUMNS = [
-    "id", "ticket_no", "district", "road", "spot_no", "plate_no", "amount", "due_date",
+    "id", "ticket_no", "district", "road", "spot_no", "gps_lat", "gps_lng",
+    "plate_no", "amount", "due_date",
     "parking_date", "parking_start", "parking_end", "data_source", "manual_corrected",
     "inspector_username", "issue_datetime", "time_diff_minutes", "judgement",
     "review_required", "duplicate_warning", "status", "review_outcome", "review_note",

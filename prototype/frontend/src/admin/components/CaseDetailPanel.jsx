@@ -66,6 +66,20 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
           <li><span>帳單編號</span><span>{caseData.ticket_no}</span></li>
           <li><span>車牌</span><span>{caseData.plate_no}</span></li>
           <li><span>地點</span><span>{caseData.district} {caseData.road} {caseData.spot_no}</span></li>
+          {caseData.gps_lat != null && caseData.gps_lng != null && (
+            <li>
+              <span>GPS 定位</span>
+              <span>
+                <a
+                  href={`https://www.google.com/maps?q=${caseData.gps_lat},${caseData.gps_lng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {caseData.gps_lat.toFixed(5)}, {caseData.gps_lng.toFixed(5)}
+                </a>
+              </span>
+            </li>
+          )}
           <li><span>應繳金額</span><span>{caseData.amount}</span></li>
           <li><span>停車時段</span><span>{caseData.parking_start} ~ {caseData.parking_end}</span></li>
           <li><span>解析出的開單時間</span><span>{caseData.issue_datetime ?? "—"}</span></li>
