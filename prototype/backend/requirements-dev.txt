@@ -1,0 +1,7 @@
+# Test-only dependencies (kept out of the runtime image / requirements.txt).
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest
+-r requirements.txt
+pytest>=8.0
+# httpx is a runtime dependency (see requirements.txt); also used by
+# fastapi.testclient and the QR-service tests.

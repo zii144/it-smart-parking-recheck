@@ -41,9 +41,9 @@ export default function CaseSearch({ adminUsername }) {
           </span>
           <h2>案件查詢</h2>
         </div>
-        <a className="btn-secondary" href={adminApi.exportCsvUrl()} target="_blank" rel="noreferrer">
+        <button className="btn-secondary" type="button" onClick={() => adminApi.downloadCsv()}>
           <Download size={15} /> 匯出 CSV
-        </a>
+        </button>
       </div>
 
       <form className="filter-bar" onSubmit={handleSearch}>

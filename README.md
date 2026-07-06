@@ -282,4 +282,4 @@ sequenceDiagram
 
 ## 專案現況
 
-除本設計文件外，`prototype/` 目錄下已有一份可執行的原型，涵蓋稽查員 APP、後台管理系統（管理人員＋系統管理員功能）與共用的 FastAPI + SQLite 後端，並可用 Docker 一鍵啟動。原型優先驗證本文件的核心流程、狀態機與判定規則，對範圍做了一些刻意簡化（例如 QR 掃描以示範代碼模擬、管理人員與系統管理員合併為一組登入），完整清單與原因說明見 [`prototype/README.md`](prototype/README.md) 的「與狀態圖／範圍的簡化說明」章節。
+除本設計文件外，`prototype/` 目錄下已有一份可執行的原型，涵蓋稽查員 APP、後台管理系統（管理人員與系統管理員已分權為兩組登入）與共用的後端（FastAPI + SQLAlchemy，本機用 SQLite、部署用 PostgreSQL），並可用 Docker 一鍵啟動。原型優先驗證本文件的核心流程、狀態機與判定規則，並已陸續補上生產強化：bcrypt 密碼、JWT 與端點角色分權、CORS 白名單、Alembic 遷移、QR 查詢網站的真實抓取＋解析（含 SSRF 防護），以及 57 個 `pytest` 測試與 CI。剩餘的刻意簡化（例如離線偵測、GPS 定位）與原因說明見 [`prototype/README.md`](prototype/README.md) 的「與狀態圖／範圍的簡化說明」章節。

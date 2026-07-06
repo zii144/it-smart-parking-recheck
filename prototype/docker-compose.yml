@@ -1,27 +1,58 @@
-# Runs the whole prototype (inspector app + admin console + API) with:
+# Runs the whole app (inspector app + admin console + API + PostgreSQL) with:
 #   cd prototype
 #   docker compose up --build
 #
 # Then open:
 #   http://localhost:8080/        - inspector app  (insp01 / pass123)
-#   http://localhost:8080/admin   - admin console  (admin01 / admin123)
+#   http://localhost:8080/admin   - admin console  (manager01 / manager123,
+#                                    or sysadmin01 / sysadmin123)
 #
 # The frontend container (nginx) proxies /api/ and /uploads/ to the backend
 # container, so the browser only ever talks to port 8080. The backend is
 # also published on 8000 directly, which is handy for curling the API or
 # hitting http://localhost:8000/docs (FastAPI's interactive API docs).
 #
-# Data (SQLite DB + uploaded photos) persists in the `parking_data` named
-# volume across restarts. Run `docker compose down -v` to wipe it and start
-# fresh with just the seed data.
+# Data now lives in PostgreSQL (the `db` service), persisted in the
+# `parking_pgdata` volume. Uploaded photos persist in `parking_data`. The
+# backend runs `alembic upgrade head` on start to create/upgrade the schema.
+# Run `docker compose down -v` to wipe both volumes and start fresh with just
+# the seed data.
+#
+# IMPORTANT: set a strong JWT_SECRET (e.g. in a .env file next to this one, see
+# backend/.env.example) before any real deployment - the compose default is a
+# placeholder only.
 
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: parking
+      POSTGRES_PASSWORD: parking
+      POSTGRES_DB: parking
+    volumes:
+      - parking_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking -d parking"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://parking:parking@db:5432/parking
+      JWT_SECRET: ${JWT_SECRET:-please-change-me-before-deploying}
+      JWT_EXPIRE_MINUTES: "720"
+      CORS_ALLOW_ORIGINS: http://localhost:8080
+      PARKING_UPLOADS_DIR: /app/data/uploads
     ports:
       - "8000:8000"
     volumes:
       - parking_data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -35,3 +66,4 @@ services:
 
 volumes:
   parking_data:
+  parking_pgdata:

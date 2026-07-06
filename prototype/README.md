@@ -9,7 +9,7 @@
 
 ## 技術棧
 
-- 後端：Python 3 + FastAPI + 原生 `sqlite3`（`prototype/backend`）
+- 後端：Python 3 + FastAPI + SQLAlchemy（ORM）+ Alembic（資料庫遷移）；資料庫由 `DATABASE_URL` 決定，本機開發預設 SQLite、部署用 PostgreSQL（`prototype/backend`）
 - 前端：React + Vite + `lucide-react`（圖示）+ `recharts`（後台統計圖表）+ `qr-scanner`（相機 QR 解碼，見下方說明）（`prototype/frontend`）
 - 容器化：Docker + `docker-compose.yml`（`prototype/backend/Dockerfile`、`prototype/frontend/Dockerfile` + nginx）
 - QR Code 掃描使用真實相機即時解碼（`qr-scanner` 套件），解碼出的內容仍透過 `QR_DEMO_CODES` 對照表模擬「外部查詢網站」的回應（見下方「與狀態圖／範圍的簡化說明」）
@@ -71,9 +71,10 @@ docker compose up --build
 
 **後台管理系統**
 
-| 帳號 | 密碼 | 說明 |
-| --- | --- | --- |
-| `admin01` | `admin123` | 對應設計文件的「管理人員」+「系統管理員」（見下方簡化說明） |
+| 帳號 | 密碼 | 角色 | 可用功能 |
+| --- | --- | --- | --- |
+| `manager01` | `manager123` | 管理人員 | 複核佇列、案件查詢、統計資料、CSV 匯出 |
+| `sysadmin01` | `sysadmin123` | 系統管理員 | 稽查員帳號管理、路段管理、系統設定 |
 
 ## Demo QR Code
 
@@ -146,13 +147,61 @@ docker compose up --build
 這個原型優先驗證核心業務規則與資料流，以下地方刻意簡化，供後續正式開發參考：
 
 - **相機／定位／網路狀態檢查**：只有「稽查權限」是真實檢查（來自登入回應），相機/GPS/網路一律模擬為「已授權」。
-- **QR 掃描**：相機掃描與解碼是真的（`qr-scanner` 套件，透過瀏覽器 `getUserMedia` 讀取相機串流、辨識 QR Code），但沒有呼叫真的外部 QR 查詢網站；解碼出的文字改用 `backend/app/seed.py` 裡的 `QR_DEMO_CODES` 對照表模擬三種結果（成功／查詢頁讀取失敗／掃描失敗）。真正串接時，前端相機掃描的部分可以直接沿用，但 `/api/qr/scan` 需要換成真正呼叫查詢網站並解析回傳內容。另外，相機掃描需要「安全來源」（HTTPS 或 `localhost`），這是瀏覽器規範而非可簡化項目，正式部署與區網測試都必須留意。
+- **QR 掃描與查詢**：相機掃描與解碼是真的（`qr-scanner` 套件），QR 查詢網站的串接也已改為真實的抓取＋解析管線（見下方「QR 查詢網站串接」章節）——`/api/qr/scan` 會依解碼內容呼叫外部查詢頁並解析欄位，或退回內建示範代碼。**唯一未定的是真實政府查詢站的網址與回傳格式**：目前解析器同時支援 JSON 與帶標籤的 HTML/文字頁（依設計文件的查詢頁樣式），實際串接時只需把該站主機加入白名單、必要時微調解析對應即可。另外，相機掃描需要「安全來源」（HTTPS 或 `localhost`），這是瀏覽器規範而非可簡化項目，正式部署與區網測試都必須留意。
 - **狀態機簡化**：設計文件中的狀態圖有 30+ 個細分狀態（`UPLOADING`、`BACKEND_VALIDATING`、`STORED`…）。原型把「上傳＋後端驗證＋入庫」收斂成一次 API 呼叫（`POST /api/cases`），案件先落在 `REVIEW_REQUIRED` 或 `CLOSED`；後台複核時選「需補充資料」會過渡到 `REVIEW_NEED_INFO`，其餘四種複核結果都直接收斂為 `CLOSED`。畫面上方的「狀態：XXX」小標籤只是對照設計文件用的前端步驟名稱，並非後端持久化的狀態欄位。
 - **離線補傳**：用瀏覽器 `localStorage` 佇列＋手動「模擬離線」開關，取代真正的裝置離線偵測。背景同步時，為了讓整批補傳不被單一重複帳單卡住，一律以 `save_anyway=true` 重新送出（真正實作時，這裡應該讓稽查員或後台明確處理每一筆補傳的重複警示，而不是自動略過）。
 - **帳單編號格式**：只支援範例 `Q7028435D095253` 對應的月份 1 碼（1–9）＋日期 2 碼＋開單員編號 5 碼＋時間 6 碼；10、11、12 月的編碼方式原始設計文件未定義，`business_rules.py` 裡有明確標註此限制，正式開發前需與需求方確認。
-- **管理人員／系統管理員合併為一個登入**：設計文件的使用案例圖把這兩者列為不同角色，但原型只用一組 `admin_users` 帳號（`admin01`）同時提供複核/統計/報表（管理人員）與帳號/路段/規則設定（系統管理員）功能，沒有做角色分權。正式開發時應拆成兩組權限。
-- **權限/驗證**：`/api/login`、`/api/admin/login` 回傳的 token 只是示範用途，並非正式的 JWT／session 機制；後台所有 `/api/admin/*` 端點目前沒有驗證中介層擋著（只靠前端「有沒有登入」的畫面邏輯），正式環境必須補上伺服器端的權限檢查。
+- ~~**管理人員／系統管理員合併為一個登入**~~（已拆分，見下方「後台角色分權」章節）：現在 `admin_users` 有 `role` 欄位，`manager01`（管理人員）與 `sysadmin01`（系統管理員）各自登入、各自的 JWT 角色，後端每個 `/api/admin/*` 端點依角色分別以 `require_manager` / `require_sysadmin` 把關，前端也只顯示該角色可用的分頁。
+- **權限/驗證**：（已強化，見下方「生產環境強化」章節）登入回傳的是正式的簽章 JWT，所有非公開端點都有伺服器端 `require_inspector` / `require_admin` 中介層驗證與角色分權；密碼以 bcrypt 雜湊儲存、CORS 改為白名單。仍待處理：JWT 尚無 refresh／撤銷（登出僅前端清除 token）、稽查員與管理員 JWT 皆為單一密鑰 HS256、尚未加上速率限制與上傳檔案大小限制。
 - **系統參數僅示範一項**：目前只有「開單逾時門檻」是真正端到端可調整、會影響判定計算的參數，用來示範「判定規則」這個概念；沒有為了湊數而加其他假的開關。
+
+## 生產環境強化（已完成）
+
+這一批改動把原型往「可上線」推進了一步，涵蓋四個項目：
+
+1. **密碼儲存**：改用 **bcrypt** 加鹽雜湊（`app/security.py`），資料庫 `password` 欄位存的是 `$2b$...` 雜湊而非明碼；`seed.py` 建立示範帳號時即雜湊。示範帳密：`insp01/pass123`、`manager01/manager123`、`sysadmin01/sysadmin123`。
+2. **登入 Session**：登入回傳 **簽章 JWT**（HS256，含 `sub`／`role`／`exp`），取代原本的 `base64(username)`。效期由 `JWT_EXPIRE_MINUTES` 控制（預設 12 小時）。
+3. **端點權限驗證**：新增 `require_inspector` / `require_admin` 相依，**每一個非公開端點**都會驗證 Bearer token 與角色——後台 `/api/admin/*` 不再是「裸奔」狀態。同時 `/api/cases` 只回傳登入者本人的案件、儲存案件時 `inspector_username` 一律取自 token（不信任前端傳入值）。
+4. **資料庫**：以 **SQLAlchemy + Alembic** 取代原生 `sqlite3`，同一套模型可跑 SQLite（本機/測試）或 **PostgreSQL**（部署，`docker compose` 已內含 `db` 服務）。schema 由 `alembic upgrade head` 建立（容器啟動時自動執行）。
+5. **CORS**：由 `*` 萬用字元改為 `CORS_ALLOW_ORIGINS` 環境變數的**白名單**。
+
+**部署前務必設定的環境變數**（見 `backend/.env.example`）：`JWT_SECRET`（必須換成長隨機字串，否則啟動時會印出警告）、`DATABASE_URL`、`CORS_ALLOW_ORIGINS`。
+
+> 尚未涵蓋（後續工作）：JWT refresh／登出撤銷、HTTPS/TLS 終結、API 速率限制、上傳檔案大小/類型限制、稽查員與管理員以不同密鑰或非對稱簽章分離、稽核日誌。
+
+### 後台角色分權（已實作）
+
+設計文件把後台列為兩個不同角色，原型原本合併為一組帳號；現在已依角色拆分：
+
+- **資料模型**：`admin_users` 新增 `role` 欄位（`manager` | `sysadmin`），由 Alembic migration `0002_admin_role` 建立。
+- **兩組帳號**：`manager01`（管理人員）、`sysadmin01`（系統管理員），各自登入。
+- **JWT 帶角色**：`/api/admin/login` 依帳號角色簽發帶 `role` 的 token。
+- **端點分權**：`require_manager` 守 `複核佇列／案件查詢／統計／CSV 匯出`；`require_sysadmin` 守 `稽查員帳號／路段／系統設定`。兩者互不越權（跨角色呼叫回 403）。
+- **前端分頁**：後台只顯示登入角色可用的分頁（管理人員三個、系統管理員三個），並非只是隱藏——對應 API 在後端一樣會擋。
+
+### QR 查詢網站串接（已實作）
+
+設計文件的循序圖中，行動 APP 掃描停車單 QR Code（其內容是一個指向外部「查詢網站」的網址），後端抓取該頁並解析出帳單資料。這條路徑已從純示範改為真實管線（`backend/app/qr_service.py`）：
+
+- **兩種解析來源**：(1) 內建示範代碼（`QR-A1001…`，`QR_DEMO_MODE` 開啟時免連線，供展示/測試）；(2) 真實網址——後端實際以 HTTP 抓取並解析。
+- **解析格式**：同時支援 **JSON** 與**帶標籤的 HTML/文字頁**（`帳單編號：…`、`停車開始時間：…`），並會把「只有時間」的欄位（如 `11:40`）與停車日期組成 ISO 時間，交給既有判定邏輯。
+- **SSRF 防護（重要）**：因為要抓取的網址來自被掃描的 QR（不可信），後端只會抓取**主機在白名單內**（`QR_QUERY_ALLOWED_HOSTS`）、且非私有/loopback/保留位址（防 DNS rebinding）、scheme 為 http(s)、且不跟隨轉址的網址。**白名單預設為空 = 完全關閉真實抓取**，確保預設情況下後端絕不會去抓 QR 提供的任意網址；正式環境把真實查詢站主機加入白名單即可啟用。
+- **本地示範用查詢站**：`GET /mock-qr-site/{token}` 會回傳一個擬真的停車單 HTML 頁（`QR_MOCK_SITE_ENABLED`，正式環境請關閉），讓「掃描網址 → 後端抓取 → 解析」整條路徑可在本機端到端實測。
+- **前端無需改動**：相機解碼後把內容送到 `/api/qr/scan`，回傳格式（`success`／`fetch_failed`／`scan_failed`）不變。
+
+相關環境變數見 `backend/.env.example` 的「QR query site」區塊。
+
+### 自動化測試
+
+後端有一組 `pytest` 測試（`backend/tests/`，共 57 個測試），涵蓋上述強化項目：密碼 bcrypt 雜湊且資料庫無明碼、JWT 登入成功/失敗、缺少/偽造/過期 token、稽查員／管理人員／系統管理員三方角色分權（含管理人員↔系統管理員互不越權）、儲存案件時 `inspector_username` 取自 token、重複偵測 409／`save_anyway`、案件列表僅限本人、管理員 CRUD、CSV 匯出、「逾時門檻」設定會端到端改變判定結果，以及 QR 查詢串接（示範代碼、真實 JSON／HTML 解析、抓取逾時、以及 SSRF 白名單防護）。每個測試都用獨立、重新 seed 的 SQLite 資料庫，彼此不干擾。
+
+執行方式：
+
+```bash
+cd prototype/backend
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
 
 ## 已完成的驗證
 

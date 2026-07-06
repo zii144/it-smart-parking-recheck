@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ParkingCircle, LogOut, ArrowLeft, Save, Loader2, PartyPopper, ListChecks, ShieldHalf } from "lucide-react";
 import "./styles.css";
-import { api, ApiError } from "./api";
+import { api, ApiError, clearAuthToken } from "./api";
 import { loadQueue, enqueue, removeFromQueue } from "./offlineQueue";
 
 import Login from "./components/Login";
@@ -186,7 +186,7 @@ export default function InspectorApp() {
             </a>
             <button
               className="btn-ghost"
-              onClick={() => { setInspector(null); setStep("login"); setDraft(emptyDraft()); }}
+              onClick={() => { clearAuthToken(); setInspector(null); setStep("login"); setDraft(emptyDraft()); }}
             >
               <LogOut size={15} /> 登出
             </button>

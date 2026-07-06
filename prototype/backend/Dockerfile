@@ -1,7 +1,9 @@
-# Backend container for the parking-ticket inspection prototype API.
-# Standard slim Python image; SQLite DB + uploaded photos live under
-# /app/data, which docker-compose.yml mounts as a named volume so data
-# survives `docker compose down` (without -v).
+# Backend container for the parking-ticket inspection API.
+# Standard slim Python image. Schema is created/upgraded by Alembic on start
+# (see docker-entrypoint.sh); uploaded photos live under /app/data, which
+# docker-compose.yml mounts as a named volume so they survive
+# `docker compose down` (without -v). The database itself is the separate
+# `db` (PostgreSQL) service, selected via DATABASE_URL.
 
 FROM python:3.11-slim
 
@@ -11,16 +13,22 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini .
+COPY docker-entrypoint.sh .
+RUN chmod +x docker-entrypoint.sh && mkdir -p /app/data
 
-ENV PARKING_DB_PATH=/app/data/parking.db \
-    PARKING_UPLOADS_DIR=/app/data/uploads \
+# DATABASE_URL / JWT_SECRET / CORS_ALLOW_ORIGINS are provided by
+# docker-compose.yml. Without DATABASE_URL the app falls back to a local
+# SQLite file (dev convenience) - see app/config.py.
+ENV PARKING_UPLOADS_DIR=/app/data/uploads \
     PYTHONUNBUFFERED=1
-
-RUN mkdir -p /app/data
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
+# Longer start-period so first-boot migrations have time to run before the
+# healthcheck starts counting failures.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./docker-entrypoint.sh"]
