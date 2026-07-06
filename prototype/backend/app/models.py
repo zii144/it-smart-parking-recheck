@@ -67,6 +67,10 @@ class Case(Base):
     district: Mapped[str | None] = mapped_column(String(64))
     road: Mapped[str | None] = mapped_column(String(128))
     spot_no: Mapped[str | None] = mapped_column(String(64))
+    # Auxiliary GPS captured on the device when the location was selected
+    # (design step 2 / '取得 GPS 輔助定位'). Nullable: permission may be denied.
+    gps_lat: Mapped[float | None] = mapped_column(Float)
+    gps_lng: Mapped[float | None] = mapped_column(Float)
     plate_no: Mapped[str | None] = mapped_column(String(32))
     amount: Mapped[float | None] = mapped_column(Float)
     due_date: Mapped[str | None] = mapped_column(String(32))

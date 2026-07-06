@@ -59,6 +59,27 @@ def test_saved_inspector_comes_from_token_not_payload(client, inspector_token):
     assert res.json()["inspector_username"] == "insp01"
 
 
+def test_gps_coordinates_are_stored(client, inspector_token):
+    res = client.post(
+        "/api/cases",
+        headers=auth(inspector_token),
+        json=_clean_case_payload(gps_lat=25.03746, gps_lng=121.56498),
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["gps_lat"] == 25.03746
+    assert body["gps_lng"] == 121.56498
+
+
+def test_gps_is_optional(client, inspector_token):
+    # A case saved without GPS (permission denied) still stores, coords null.
+    res = client.post("/api/cases", headers=auth(inspector_token), json=_clean_case_payload())
+    assert res.status_code == 200
+    body = res.json()
+    assert body["gps_lat"] is None
+    assert body["gps_lng"] is None
+
+
 def test_overdue_case_requires_review(client, inspector_token):
     # QR-A1002: issue 10:15:30 vs start 08:50 -> ~85 min -> OVERDUE.
     res = client.post(
