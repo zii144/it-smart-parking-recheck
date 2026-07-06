@@ -5,6 +5,7 @@ import {
 import "../styles.css";
 import "./admin.css";
 
+import { clearAuthToken } from "../api";
 import AdminLogin from "./components/AdminLogin";
 import ReviewQueue from "./components/ReviewQueue";
 import CaseSearch from "./components/CaseSearch";
@@ -46,7 +47,7 @@ export default function AdminApp() {
           <a className="btn-ghost" href="/">
             <ParkingCircle size={15} /> 稽查員 APP
           </a>
-          <button className="btn-ghost" onClick={() => setAdmin(null)}>
+          <button className="btn-ghost" onClick={() => { clearAuthToken(); setAdmin(null); }}>
             <LogOut size={15} /> 登出
           </button>
         </div>

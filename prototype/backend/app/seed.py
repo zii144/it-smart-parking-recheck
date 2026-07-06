@@ -8,8 +8,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import func, select
+
 from . import business_rules as rules
-from .db import get_connection, get_setting, set_setting
+from .db import SessionLocal, get_setting, set_setting
+from .models import AdminUser, Case, Inspector, Location
+from .security import hash_password
 
 # --- Inspector accounts -----------------------------------------------------
 # insp01 has inspection permission; insp02 does not (demoes the "無權限" branch).
@@ -121,89 +125,92 @@ QR_DEMO_CODES = {
 
 
 def seed(force: bool = False) -> None:
-    conn = get_connection()
+    """Idempotently populate demo data. Passwords are bcrypt-hashed on insert,
+    so no plaintext credential is ever written to the database."""
+    db = SessionLocal()
     try:
-        existing = conn.execute("SELECT COUNT(*) AS c FROM inspectors").fetchone()["c"]
+        existing = db.scalar(select(func.count()).select_from(Inspector)) or 0
         if existing and not force:
             return
 
         for insp in DEMO_INSPECTORS:
-            conn.execute(
-                "INSERT OR IGNORE INTO inspectors (username, password, display_name, has_permission) "
-                "VALUES (:username, :password, :display_name, :has_permission)",
-                insp,
-            )
+            if db.scalar(select(Inspector).where(Inspector.username == insp["username"])) is None:
+                db.add(
+                    Inspector(
+                        username=insp["username"],
+                        password=hash_password(insp["password"]),
+                        display_name=insp["display_name"],
+                        has_permission=insp["has_permission"],
+                    )
+                )
 
         for admin in DEMO_ADMINS:
-            conn.execute(
-                "INSERT OR IGNORE INTO admin_users (username, password, display_name) "
-                "VALUES (:username, :password, :display_name)",
-                admin,
-            )
+            if db.scalar(select(AdminUser).where(AdminUser.username == admin["username"])) is None:
+                db.add(
+                    AdminUser(
+                        username=admin["username"],
+                        password=hash_password(admin["password"]),
+                        display_name=admin["display_name"],
+                    )
+                )
 
-        existing_locations = conn.execute("SELECT COUNT(*) AS c FROM locations").fetchone()["c"]
+        existing_locations = db.scalar(select(func.count()).select_from(Location)) or 0
         if not existing_locations:
             for district in SEED_LOCATIONS:
                 for road in district["roads"]:
                     for spot in road["spots"]:
-                        conn.execute(
-                            "INSERT INTO locations (district, road, spot_no) VALUES (?, ?, ?)",
-                            (district["district"], road["road"], spot),
+                        db.add(
+                            Location(
+                                district=district["district"],
+                                road=road["road"],
+                                spot_no=spot,
+                            )
                         )
 
         for key, value in DEFAULT_SETTINGS.items():
-            if get_setting(conn, key) is None:
-                set_setting(conn, key, value)
+            if get_setting(db, key) is None:
+                set_setting(db, key, value)
 
         # Pre-existing stored case so QR-A1001's ticket number is already "in
         # the system" -> saving it again triggers the duplicate-ticket warning.
-        existing_case = conn.execute(
-            "SELECT COUNT(*) AS c FROM cases WHERE ticket_no = ?", ("Q7028435D095253",)
-        ).fetchone()["c"]
-        if not existing_case:
+        existing_case = db.scalar(
+            select(Case).where(Case.ticket_no == "Q7028435D095253")
+        )
+        if existing_case is None:
             parsed = rules.parse_ticket_no("Q7028435D095253")
             parking_date = datetime.fromisoformat("2026-07-02").date()
             issue_dt = rules.compute_issue_datetime(parking_date, parsed)
             parking_start = datetime.fromisoformat("2026-07-02T09:05:00")
             result = rules.judge_time_diff(issue_dt, parking_start)
 
-            conn.execute(
-                """
-                INSERT INTO cases (
-                    ticket_no, district, road, spot_no, plate_no, amount, due_date,
-                    parking_date, parking_start, parking_end, data_source,
-                    manual_corrected, original_values, inspector_username,
-                    issue_datetime, time_diff_minutes, judgement, review_required,
-                    duplicate_warning, photo_path, status, synced_offline, created_at
-                ) VALUES (
-                    :ticket_no, :district, :road, :spot_no, :plate_no, :amount, :due_date,
-                    :parking_date, :parking_start, :parking_end, :data_source,
-                    0, NULL, :inspector_username,
-                    :issue_datetime, :time_diff_minutes, :judgement, 0,
-                    0, NULL, :status, 0, :created_at
+            db.add(
+                Case(
+                    ticket_no="Q7028435D095253",
+                    district="中正區",
+                    road="信義路",
+                    spot_no="A-012",
+                    plate_no="ABC-1234",
+                    amount=900,
+                    due_date="2026-07-22",
+                    parking_date="2026-07-02",
+                    parking_start="2026-07-02T09:05:00",
+                    parking_end="2026-07-02T10:05:00",
+                    data_source="AUTO_QR",
+                    manual_corrected=0,
+                    original_values=None,
+                    inspector_username="insp01",
+                    issue_datetime=issue_dt.isoformat(),
+                    time_diff_minutes=result.time_diff_minutes,
+                    judgement=result.judgement,
+                    review_required=0,
+                    duplicate_warning=0,
+                    photo_path=None,
+                    status="CLOSED",
+                    synced_offline=0,
+                    created_at="2026-07-02T10:20:00",
                 )
-                """,
-                {
-                    "ticket_no": "Q7028435D095253",
-                    "district": "中正區",
-                    "road": "信義路",
-                    "spot_no": "A-012",
-                    "plate_no": "ABC-1234",
-                    "amount": 900,
-                    "due_date": "2026-07-22",
-                    "parking_date": "2026-07-02",
-                    "parking_start": "2026-07-02T09:05:00",
-                    "parking_end": "2026-07-02T10:05:00",
-                    "data_source": "AUTO_QR",
-                    "inspector_username": "insp01",
-                    "issue_datetime": issue_dt.isoformat(),
-                    "time_diff_minutes": result.time_diff_minutes,
-                    "judgement": result.judgement,
-                    "status": "CLOSED",
-                    "created_at": "2026-07-02T10:20:00",
-                },
             )
 
-        conn.commit()
+        db.commit()
     finally:
-        conn.close()
+        db.close()

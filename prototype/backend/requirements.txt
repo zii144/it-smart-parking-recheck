@@ -1,3 +1,14 @@
 fastapi>=0.110
 uvicorn[standard]>=0.27
 python-multipart>=0.0.9
+
+# Persistence: SQLAlchemy 2.x ORM + Alembic migrations. Works against both
+# SQLite (local dev / tests) and PostgreSQL (real deployments) from the same
+# models, driven entirely by DATABASE_URL.
+SQLAlchemy>=2.0,<2.1
+alembic>=1.13
+psycopg2-binary>=2.9        # PostgreSQL driver (postgresql+psycopg2://...)
+
+# Security: password hashing + signed session tokens.
+bcrypt>=4.1                 # salted password hashing (Goal 1)
+PyJWT>=2.8                  # signed JWT access tokens (Goal 2)

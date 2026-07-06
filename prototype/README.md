@@ -9,7 +9,7 @@
 
 ## 技術棧
 
-- 後端：Python 3 + FastAPI + 原生 `sqlite3`（`prototype/backend`）
+- 後端：Python 3 + FastAPI + SQLAlchemy（ORM）+ Alembic（資料庫遷移）；資料庫由 `DATABASE_URL` 決定，本機開發預設 SQLite、部署用 PostgreSQL（`prototype/backend`）
 - 前端：React + Vite + `lucide-react`（圖示）+ `recharts`（後台統計圖表）+ `qr-scanner`（相機 QR 解碼，見下方說明）（`prototype/frontend`）
 - 容器化：Docker + `docker-compose.yml`（`prototype/backend/Dockerfile`、`prototype/frontend/Dockerfile` + nginx）
 - QR Code 掃描使用真實相機即時解碼（`qr-scanner` 套件），解碼出的內容仍透過 `QR_DEMO_CODES` 對照表模擬「外部查詢網站」的回應（見下方「與狀態圖／範圍的簡化說明」）
@@ -151,8 +151,34 @@ docker compose up --build
 - **離線補傳**：用瀏覽器 `localStorage` 佇列＋手動「模擬離線」開關，取代真正的裝置離線偵測。背景同步時，為了讓整批補傳不被單一重複帳單卡住，一律以 `save_anyway=true` 重新送出（真正實作時，這裡應該讓稽查員或後台明確處理每一筆補傳的重複警示，而不是自動略過）。
 - **帳單編號格式**：只支援範例 `Q7028435D095253` 對應的月份 1 碼（1–9）＋日期 2 碼＋開單員編號 5 碼＋時間 6 碼；10、11、12 月的編碼方式原始設計文件未定義，`business_rules.py` 裡有明確標註此限制，正式開發前需與需求方確認。
 - **管理人員／系統管理員合併為一個登入**：設計文件的使用案例圖把這兩者列為不同角色，但原型只用一組 `admin_users` 帳號（`admin01`）同時提供複核/統計/報表（管理人員）與帳號/路段/規則設定（系統管理員）功能，沒有做角色分權。正式開發時應拆成兩組權限。
-- **權限/驗證**：`/api/login`、`/api/admin/login` 回傳的 token 只是示範用途，並非正式的 JWT／session 機制；後台所有 `/api/admin/*` 端點目前沒有驗證中介層擋著（只靠前端「有沒有登入」的畫面邏輯），正式環境必須補上伺服器端的權限檢查。
+- **權限/驗證**：（已強化，見下方「生產環境強化」章節）登入回傳的是正式的簽章 JWT，所有非公開端點都有伺服器端 `require_inspector` / `require_admin` 中介層驗證與角色分權；密碼以 bcrypt 雜湊儲存、CORS 改為白名單。仍待處理：JWT 尚無 refresh／撤銷（登出僅前端清除 token）、稽查員與管理員 JWT 皆為單一密鑰 HS256、尚未加上速率限制與上傳檔案大小限制。
 - **系統參數僅示範一項**：目前只有「開單逾時門檻」是真正端到端可調整、會影響判定計算的參數，用來示範「判定規則」這個概念；沒有為了湊數而加其他假的開關。
+
+## 生產環境強化（已完成）
+
+這一批改動把原型往「可上線」推進了一步，涵蓋四個項目：
+
+1. **密碼儲存**：改用 **bcrypt** 加鹽雜湊（`app/security.py`），資料庫 `password` 欄位存的是 `$2b$...` 雜湊而非明碼；`seed.py` 建立示範帳號時即雜湊。示範帳密不變（`insp01/pass123`、`admin01/admin123`）。
+2. **登入 Session**：登入回傳 **簽章 JWT**（HS256，含 `sub`／`role`／`exp`），取代原本的 `base64(username)`。效期由 `JWT_EXPIRE_MINUTES` 控制（預設 12 小時）。
+3. **端點權限驗證**：新增 `require_inspector` / `require_admin` 相依，**每一個非公開端點**都會驗證 Bearer token 與角色——後台 `/api/admin/*` 不再是「裸奔」狀態。同時 `/api/cases` 只回傳登入者本人的案件、儲存案件時 `inspector_username` 一律取自 token（不信任前端傳入值）。
+4. **資料庫**：以 **SQLAlchemy + Alembic** 取代原生 `sqlite3`，同一套模型可跑 SQLite（本機/測試）或 **PostgreSQL**（部署，`docker compose` 已內含 `db` 服務）。schema 由 `alembic upgrade head` 建立（容器啟動時自動執行）。
+5. **CORS**：由 `*` 萬用字元改為 `CORS_ALLOW_ORIGINS` 環境變數的**白名單**。
+
+**部署前務必設定的環境變數**（見 `backend/.env.example`）：`JWT_SECRET`（必須換成長隨機字串，否則啟動時會印出警告）、`DATABASE_URL`、`CORS_ALLOW_ORIGINS`。
+
+> 尚未涵蓋（後續工作）：JWT refresh／登出撤銷、HTTPS/TLS 終結、API 速率限制、上傳檔案大小/類型限制、稽查員與管理員以不同密鑰或非對稱簽章分離、稽核日誌。
+
+### 自動化測試
+
+後端有一組 `pytest` 測試（`backend/tests/`，共 33 個測試），涵蓋上述強化項目：密碼 bcrypt 雜湊且資料庫無明碼、JWT 登入成功/失敗、缺少/偽造/過期 token、稽查員與管理員雙向角色分權、儲存案件時 `inspector_username` 取自 token、重複偵測 409／`save_anyway`、案件列表僅限本人、管理員 CRUD、CSV 匯出、以及「逾時門檻」設定會端到端改變判定結果。每個測試都用獨立、重新 seed 的 SQLite 資料庫，彼此不干擾。
+
+執行方式：
+
+```bash
+cd prototype/backend
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
 
 ## 已完成的驗證
 
