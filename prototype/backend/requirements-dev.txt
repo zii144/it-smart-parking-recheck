@@ -3,4 +3,5 @@
 #   pytest
 -r requirements.txt
 pytest>=8.0
-httpx>=0.27          # used by fastapi.testclient
+# httpx is a runtime dependency (see requirements.txt); also used by
+# fastapi.testclient and the QR-service tests.

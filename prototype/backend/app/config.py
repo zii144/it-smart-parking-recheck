@@ -17,6 +17,13 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _default_database_url() -> str:
     # Local dev default: a SQLite file next to the backend package, matching
     # the old PARKING_DB_PATH behaviour so nothing breaks for someone who just
@@ -50,6 +57,23 @@ class Settings:
         self.cors_allow_origins: list[str] = [
             o.strip() for o in raw_origins.split(",") if o.strip()
         ]
+
+        # QR query-site resolution (the '取得停車單資料' step).
+        # - demo mode resolves the built-in QR-A1001... codes without a network
+        #   call, so the app is demoable/testable out of the box.
+        # - real URLs decoded from a QR are only fetched if their host is on
+        #   this allow-list. Empty (the default) = real fetching is DISABLED, so
+        #   the backend never fetches arbitrary QR-supplied URLs (SSRF safety).
+        #   Set QR_QUERY_ALLOWED_HOSTS to the real query-site host to enable.
+        self.qr_demo_mode: bool = _env_bool("QR_DEMO_MODE", True)
+        raw_qr_hosts = os.environ.get("QR_QUERY_ALLOWED_HOSTS", "")
+        self.qr_query_allowed_hosts: list[str] = [
+            h.strip().lower() for h in raw_qr_hosts.split(",") if h.strip()
+        ]
+        self.qr_query_timeout: float = float(os.environ.get("QR_QUERY_TIMEOUT", "5"))
+        # A local stand-in for the external query site, for end-to-end demoing
+        # the real fetch path without a live government endpoint. Disable in prod.
+        self.qr_mock_site_enabled: bool = _env_bool("QR_MOCK_SITE_ENABLED", True)
 
     @property
     def jwt_secret_is_default(self) -> bool:

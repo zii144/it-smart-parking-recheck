@@ -53,13 +53,14 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from . import business_rules as rules
+from . import qr_service
 from .config import get_settings
 from .db import get_db, get_setting, init_db, set_setting
 from .models import AdminUser, Case, Inspector, Location, row_to_dict
@@ -232,27 +233,53 @@ def get_locations(
 
 
 # --------------------------------------------------------------------------
-# Simulated QR scan
+# QR scan -> resolve ticket data from the (external) query site
 # --------------------------------------------------------------------------
 @app.post("/api/qr/scan")
 def scan_qr(payload: dict, principal: Principal = Depends(require_inspector)):
-    qr_code = (payload or {}).get("qr_code", "")
-    entry = QR_DEMO_CODES.get(qr_code)
+    """Resolve a scanned QR code into ticket data.
 
-    if entry is None:
-        return {"status": "scan_failed"}
+    `qr_code` is the raw decoded QR content: either a built-in demo code
+    (QR-A1001 ...) or a real URL to the query site. See app/qr_service.py for
+    the resolution + SSRF rules.
+    """
+    return qr_service.resolve((payload or {}).get("qr_code", ""))
 
-    if entry["type"] == "success":
-        return {"status": "success", "ticket": {k: v for k, v in entry.items() if k not in ("type", "note")}}
 
-    if entry["type"] == "fetch_failed":
-        return {
-            "status": "fetch_failed",
-            "query_url": entry["query_url"],
-            "page_preview": entry["page_preview"],
-        }
+# A local stand-in for the external '查詢網站', so the real fetch-and-parse path
+# can be exercised end to end without a live government endpoint. Serves a
+# realistic labeled HTML ticket page. Disabled by QR_MOCK_SITE_ENABLED=false.
+# To use it, point QR_QUERY_ALLOWED_HOSTS at this host (e.g. localhost) and have
+# a demo QR encode e.g. http://localhost:8000/mock-qr-site/A1004
+_MOCK_LABELS = [
+    ("ticket_no", "帳單編號"),
+    ("plate_no", "車牌號碼"),
+    ("amount", "應繳金額"),
+    ("due_date", "繳費期限"),
+    ("parking_date", "停車日期"),
+    ("parking_start", "停車開始時間"),
+    ("parking_end", "停車結束時間"),
+]
 
-    return {"status": "scan_failed"}
+
+@app.get("/mock-qr-site/{token}", response_class=HTMLResponse)
+def mock_qr_site(token: str):
+    if not settings.qr_mock_site_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+    entry = QR_DEMO_CODES.get(f"QR-{token}")
+    if not entry or entry.get("type") != "success":
+        raise HTTPException(status_code=404, detail="查無此停車單")
+    rows = "".join(
+        f"<p><strong>{label}：</strong>{entry[key]}</p>"
+        for key, label in _MOCK_LABELS
+        if key in entry
+    )
+    html = (
+        "<!doctype html><html lang='zh-Hant'><head><meta charset='utf-8'>"
+        "<title>停車單查詢</title></head><body>"
+        "<h1>停車單查詢結果</h1>" + rows + "</body></html>"
+    )
+    return HTMLResponse(content=html)
 
 
 # --------------------------------------------------------------------------
