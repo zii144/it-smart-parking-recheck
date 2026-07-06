@@ -43,6 +43,6 @@ def test_seeded_accounts_store_bcrypt_hashes(client):
         assert rows, "expected seeded accounts"
         for row in rows:
             assert row.password.startswith("$2b$"), f"{row.username} not hashed"
-            assert row.password not in ("pass123", "admin123")
+            assert row.password not in ("pass123", "manager123", "sysadmin123")
     finally:
         db.close()

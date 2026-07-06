@@ -3,8 +3,8 @@ import { ShieldHalf, AlertCircle, LogIn, Loader2, ParkingCircle } from "lucide-r
 import { adminApi, ApiError } from "../../api";
 
 export default function AdminLogin({ onLoggedIn }) {
-  const [username, setUsername] = useState("admin01");
-  const [password, setPassword] = useState("admin123");
+  const [username, setUsername] = useState("manager01");
+  const [password, setPassword] = useState("manager123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -57,7 +57,8 @@ export default function AdminLogin({ onLoggedIn }) {
           </button>
         </form>
         <p className="hint">
-          Demo 帳號：<code>admin01</code> / <code>admin123</code>
+          Demo 帳號：<code>manager01</code> / <code>manager123</code>（管理人員）、
+          <code>sysadmin01</code> / <code>sysadmin123</code>（系統管理員）
         </p>
         <a className="btn-link app-switch-link" href="/">
           <ParkingCircle size={13} /> 前往稽查員 APP

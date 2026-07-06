@@ -12,8 +12,9 @@ Persistence is SQLAlchemy over SQLite (local/tests) or PostgreSQL
 Security:
   - passwords are bcrypt-hashed (app/security.py), never stored in plaintext;
   - login returns a signed, expiring JWT instead of base64(username);
-  - every non-public route is guarded by require_inspector / require_admin, so
-    the admin console API is no longer callable without an admin token;
+  - every non-public route is guarded by require_inspector / require_manager /
+    require_sysadmin, so the admin console API is no longer callable without the
+    right role token (管理人員 vs 系統管理員 are separately enforced);
   - CORS is an explicit allow-list from config, not "*".
 
 Endpoints:
@@ -24,20 +25,20 @@ Endpoints:
   POST /api/cases                    - authoritative save [inspector]
   GET  /api/cases                    - the caller's own submissions [inspector]
 
-  POST /api/admin/login               - admin console login -> JWT
-  GET  /api/admin/cases               - filtered case query [admin]
-  GET  /api/admin/cases/{id}          - single case detail [admin]
-  POST /api/admin/cases/{id}/review   - record a review decision [admin]
-  GET  /api/admin/stats               - aggregate statistics [admin]
-  GET  /api/admin/export.csv          - CSV export of all cases [admin]
-  GET  /api/admin/inspectors          - list inspector accounts [admin]
-  POST /api/admin/inspectors          - create an inspector account [admin]
-  PATCH /api/admin/inspectors/{username} - update permission/name/password [admin]
-  GET  /api/admin/locations           - flat list of parking spots [admin]
-  POST /api/admin/locations           - add a parking spot [admin]
-  DELETE /api/admin/locations/{id}    - remove a parking spot [admin]
-  GET  /api/admin/settings            - current system settings [admin]
-  PUT  /api/admin/settings            - update system settings [admin]
+  POST /api/admin/login               - admin console login -> role-based JWT
+  GET  /api/admin/cases               - filtered case query [manager]
+  GET  /api/admin/cases/{id}          - single case detail [manager]
+  POST /api/admin/cases/{id}/review   - record a review decision [manager]
+  GET  /api/admin/stats               - aggregate statistics [manager]
+  GET  /api/admin/export.csv          - CSV export of all cases [manager]
+  GET  /api/admin/inspectors          - list inspector accounts [sysadmin]
+  POST /api/admin/inspectors          - create an inspector account [sysadmin]
+  PATCH /api/admin/inspectors/{username} - update permission/name/password [sysadmin]
+  GET  /api/admin/locations           - flat list of parking spots [sysadmin]
+  POST /api/admin/locations           - add a parking spot [sysadmin]
+  DELETE /api/admin/locations/{id}    - remove a parking spot [sysadmin]
+  GET  /api/admin/settings            - current system settings [sysadmin]
+  PUT  /api/admin/settings            - update system settings [sysadmin]
 """
 from __future__ import annotations
 
@@ -65,13 +66,13 @@ from .config import get_settings
 from .db import get_db, get_setting, init_db, set_setting
 from .models import AdminUser, Case, Inspector, Location, row_to_dict
 from .security import (
-    ROLE_ADMIN,
     ROLE_INSPECTOR,
     Principal,
     create_access_token,
     hash_password,
-    require_admin,
     require_inspector,
+    require_manager,
+    require_sysadmin,
     verify_password,
 )
 from .seed import QR_DEMO_CODES, seed
@@ -465,8 +466,12 @@ def admin_login(payload: AdminLoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
 
     return {
-        "token": create_access_token(row.username, ROLE_ADMIN),
-        "admin": {"username": row.username, "display_name": row.display_name},
+        "token": create_access_token(row.username, row.role),
+        "admin": {
+            "username": row.username,
+            "display_name": row.display_name,
+            "role": row.role,
+        },
     }
 
 
@@ -479,7 +484,7 @@ def admin_list_cases(
     district: Optional[str] = None,
     q: Optional[str] = None,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_manager),
 ):
     stmt = select(Case)
 
@@ -508,7 +513,7 @@ def admin_list_cases(
 def admin_get_case(
     case_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_manager),
 ):
     row = db.get(Case, case_id)
     if not row:
@@ -521,7 +526,7 @@ def admin_review_case(
     case_id: int,
     payload: ReviewRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_manager),
 ):
     if payload.outcome not in REVIEW_OUTCOMES:
         raise HTTPException(status_code=400, detail=f"未知的複核結果：{payload.outcome}")
@@ -552,7 +557,7 @@ def admin_review_case(
 @app.get("/api/admin/stats")
 def admin_stats(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_manager),
 ):
     total = db.scalar(select(func.count()).select_from(Case)) or 0
 
@@ -619,7 +624,7 @@ CSV_COLUMNS = [
 @app.get("/api/admin/export.csv")
 def admin_export_csv(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_manager),
 ):
     rows = db.scalars(select(Case).order_by(Case.id)).all()
 
@@ -640,7 +645,7 @@ def admin_export_csv(
 @app.get("/api/admin/inspectors")
 def admin_list_inspectors(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_sysadmin),
 ):
     rows = db.scalars(select(Inspector).order_by(Inspector.username)).all()
     # Never expose the password hash.
@@ -658,7 +663,7 @@ def admin_list_inspectors(
 def admin_create_inspector(
     payload: InspectorCreateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_sysadmin),
 ):
     existing = db.scalar(select(Inspector).where(Inspector.username == payload.username))
     if existing:
@@ -684,7 +689,7 @@ def admin_update_inspector(
     username: str,
     payload: InspectorUpdateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_sysadmin),
 ):
     row = db.scalar(select(Inspector).where(Inspector.username == username))
     if not row:
@@ -709,7 +714,7 @@ def admin_update_inspector(
 @app.get("/api/admin/locations")
 def admin_list_locations(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_sysadmin),
 ):
     rows = db.scalars(
         select(Location).order_by(Location.district, Location.road, Location.spot_no)
@@ -721,7 +726,7 @@ def admin_list_locations(
 def admin_create_location(
     payload: LocationCreateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_sysadmin),
 ):
     existing = db.scalar(
         select(Location).where(
@@ -748,7 +753,7 @@ def admin_create_location(
 def admin_delete_location(
     location_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_sysadmin),
 ):
     location = db.get(Location, location_id)
     if location is None:
@@ -761,7 +766,7 @@ def admin_delete_location(
 @app.get("/api/admin/settings")
 def admin_get_settings(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_sysadmin),
 ):
     return {"overdue_threshold_minutes": _current_overdue_threshold(db)}
 
@@ -770,7 +775,7 @@ def admin_get_settings(
 def admin_update_settings(
     payload: SettingsUpdateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_sysadmin),
 ):
     if payload.overdue_threshold_minutes <= 0:
         raise HTTPException(status_code=400, detail="門檻必須大於 0")

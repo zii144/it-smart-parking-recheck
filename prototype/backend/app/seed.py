@@ -22,12 +22,13 @@ DEMO_INSPECTORS = [
     {"username": "insp02", "password": "pass123", "display_name": "李小華", "has_permission": 0},
 ]
 
-# --- Admin console account ---------------------------------------------------
-# One combined account for both the "管理人員" (review/stats/export) and
-# "系統管理員" (accounts/rules/locations) roles - see prototype/README.md for
-# why this prototype doesn't separate the two into distinct logins.
+# --- Admin console accounts --------------------------------------------------
+# The design's two distinct back-office actors, each with its own login/role:
+#   manager01  (管理人員)   -> review queue, case search, stats, export
+#   sysadmin01 (系統管理員) -> inspector accounts, locations, system settings
 DEMO_ADMINS = [
-    {"username": "admin01", "password": "admin123", "display_name": "陳經理"},
+    {"username": "manager01", "password": "manager123", "display_name": "陳經理", "role": "manager"},
+    {"username": "sysadmin01", "password": "sysadmin123", "display_name": "林管理員", "role": "sysadmin"},
 ]
 
 # --- Location picklist (seeds the DB-backed `locations` table) --------------
@@ -151,6 +152,7 @@ def seed(force: bool = False) -> None:
                         username=admin["username"],
                         password=hash_password(admin["password"]),
                         display_name=admin["display_name"],
+                        role=admin["role"],
                     )
                 )
 

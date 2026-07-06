@@ -37,6 +37,10 @@ class AdminUser(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String(255), nullable=False)  # bcrypt hash
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    # The design's two distinct back-office actors:
+    #   "manager"  (管理人員)   -> review queue, case search, stats, export
+    #   "sysadmin" (系統管理員) -> inspector accounts, locations, system settings
+    role: Mapped[str] = mapped_column(String(16), nullable=False, server_default="sysadmin")
 
 
 class Setting(Base):

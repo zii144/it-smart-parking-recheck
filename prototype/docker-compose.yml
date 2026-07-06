@@ -4,7 +4,8 @@
 #
 # Then open:
 #   http://localhost:8080/        - inspector app  (insp01 / pass123)
-#   http://localhost:8080/admin   - admin console  (admin01 / admin123)
+#   http://localhost:8080/admin   - admin console  (manager01 / manager123,
+#                                    or sysadmin01 / sysadmin123)
 #
 # The frontend container (nginx) proxies /api/ and /uploads/ to the backend
 # container, so the browser only ever talks to port 8080. The backend is

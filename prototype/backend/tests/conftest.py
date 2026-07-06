@@ -55,11 +55,22 @@ def inspector_token(client: TestClient) -> str:
     return res.json()["token"]
 
 
-@pytest.fixture()
-def admin_token(client: TestClient) -> str:
-    res = client.post("/api/admin/login", json={"username": "admin01", "password": "admin123"})
+def _admin_login(client: TestClient, username: str, password: str) -> str:
+    res = client.post("/api/admin/login", json={"username": username, "password": password})
     assert res.status_code == 200, res.text
     return res.json()["token"]
+
+
+@pytest.fixture()
+def manager_token(client: TestClient) -> str:
+    """管理人員: review queue, case search, stats, export."""
+    return _admin_login(client, "manager01", "manager123")
+
+
+@pytest.fixture()
+def sysadmin_token(client: TestClient) -> str:
+    """系統管理員: inspector accounts, locations, system settings."""
+    return _admin_login(client, "sysadmin01", "sysadmin123")
 
 
 def make_token(username: str, role: str, *, expired: bool = False) -> str:

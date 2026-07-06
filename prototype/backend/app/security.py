@@ -5,11 +5,14 @@ replaces the old plaintext `password` comparison.
 
 Goal 2 - session handling: short-lived signed JWTs (HS256) replace the old
 `base64(username)` pseudo-token. Tokens carry the subject (username) and a
-role ("inspector" | "admin") plus an expiry.
+role ("inspector" | "manager" | "sysadmin") plus an expiry.
 
-The `require_inspector` / `require_admin` FastAPI dependencies decode and
-validate the bearer token on every protected route - this is what actually
-closes the "admin endpoints are wide open" hole, not just the token format.
+The `require_inspector` / `require_manager` / `require_sysadmin` FastAPI
+dependencies decode and validate the bearer token on every protected route -
+this is what actually closes the "admin endpoints are wide open" hole, not just
+the token format. The two admin roles mirror the design's distinct actors:
+管理人員 (manager - review/stats/reports) and 系統管理員 (sysadmin -
+accounts/locations/system parameters).
 """
 from __future__ import annotations
 
@@ -25,7 +28,9 @@ from .config import get_settings
 settings = get_settings()
 
 ROLE_INSPECTOR = "inspector"
-ROLE_ADMIN = "admin"
+ROLE_MANAGER = "manager"    # 管理人員: review queue, case search, stats, export
+ROLE_SYSADMIN = "sysadmin"  # 系統管理員: inspector accounts, locations, settings
+ADMIN_ROLES = (ROLE_MANAGER, ROLE_SYSADMIN)
 
 # bcrypt hashes only the first 72 bytes of the input; longer passwords are
 # truncated here explicitly (rather than letting the backend raise) so the
@@ -117,4 +122,5 @@ def _principal_for_role(required_role: str):
 
 # Usage: `principal: Principal = Depends(require_inspector)` on a route.
 require_inspector = _principal_for_role(ROLE_INSPECTOR)
-require_admin = _principal_for_role(ROLE_ADMIN)
+require_manager = _principal_for_role(ROLE_MANAGER)
+require_sysadmin = _principal_for_role(ROLE_SYSADMIN)
