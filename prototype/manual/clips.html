@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>停車單稽查系統 · 操作示範影片</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1f2933; --muted:#67727e;
+    --line:#e3e8ee; --brand:#1f6feb; --brand-weak:#e8f0fe;
+    --code-bg:#f0f2f5; --shadow:0 1px 3px rgba(16,24,40,.08),0 1px 2px rgba(16,24,40,.04);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0f1115; --panel:#171a21; --ink:#e6e9ee; --muted:#98a2b3;
+      --line:#262b34; --brand:#5b9bff; --brand-weak:#1a2740; --code-bg:#1e222b; --shadow:0 1px 3px rgba(0,0,0,.4);}
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    line-height:1.7}
+  a{color:var(--brand); text-decoration:none} a:hover{text-decoration:underline}
+  code{background:var(--code-bg); padding:.1em .38em; border-radius:5px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.85em}
+  main{max-width:1040px; margin:0 auto; padding:44px 20px 90px}
+  h1{font-size:1.8rem; margin:0 0 6px}
+  .meta{color:var(--muted); margin:0 0 6px}
+  .pills{display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px}
+  .pill{background:var(--brand-weak); color:var(--brand); border-radius:999px; padding:4px 12px; font-size:.78rem; font-weight:600}
+  .xref{margin-top:10px; font-size:.9rem}
+
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:26px; align-items:start}
+  @media (max-width:820px){ .grid{grid-template-columns:1fr} }
+  .clip{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:var(--shadow)}
+  .clip h2{font-size:1.15rem; margin:0 0 2px}
+  .clip .role{color:var(--brand); font-weight:600; font-size:.85rem}
+  .clip .desc{color:var(--muted); font-size:.9rem; margin:8px 0 14px}
+  .videowrap{background:#0c0e12; border-radius:12px; overflow:hidden; display:flex; justify-content:center}
+  video{display:block; max-width:100%; height:auto}
+  .mobile video{max-height:560px}
+  .steps{list-style:none; margin:14px 0 0; padding:0; display:flex; flex-wrap:wrap; gap:6px}
+  .steps li{font-size:.76rem; background:var(--brand-weak); color:var(--brand); border-radius:6px; padding:3px 9px; font-weight:600}
+  .dl{margin-top:12px; font-size:.82rem; color:var(--muted)}
+  .dl a{margin-right:12px}
+  .note{border-left:4px solid var(--brand); background:var(--brand-weak); border-radius:8px; padding:12px 16px; margin:26px 0 0; font-size:.9rem}
+  .note strong{color:var(--brand)}
+</style>
+</head>
+<body>
+<main>
+  <h1>操作示範影片</h1>
+  <p class="meta">在本機啟動 FastAPI 後端 + Vite 前端後，由自動化腳本實際操作、錄製而成的兩段流程（非模擬畫面）。</p>
+  <div class="pills">
+    <span class="pill">真實後端＋前端</span>
+    <span class="pill">Playwright 驅動</span>
+    <span class="pill">端到端流程</span>
+  </div>
+  <p class="xref">📖 <a href="index.html">使用手冊</a> · 🔀 <a href="flow.html">操作路由與資料流</a></p>
+
+  <div class="grid">
+    <!-- Inspector -->
+    <div class="clip mobile">
+      <div class="role">稽查員 APP · 前端</div>
+      <h2>現場稽查：掃描 → 判定 → 儲存</h2>
+      <p class="desc">登入後選擇地點（含 GPS）、掃描停車單（示範 QR-A1002）、確認自動帶入的資料、系統即時判定<strong>開單逾時</strong>、拍照存證，最後存入後端並標記 <code>REVIEW_REQUIRED</code>。</p>
+      <div class="videowrap">
+        <video src="clips/inspector.mp4" poster="clips/inspector_poster.jpg" controls autoplay muted loop playsinline></video>
+      </div>
+      <ul class="steps">
+        <li>登入</li><li>選地點＋GPS</li><li>掃描 QR</li><li>確認資料</li><li>時效判定</li><li>拍照</li><li>儲存入庫</li>
+      </ul>
+      <p class="dl">下載：<a href="clips/inspector.mp4">MP4</a><a href="clips/inspector.gif">GIF</a></p>
+    </div>
+
+    <!-- Admin -->
+    <div class="clip">
+      <div class="role">後台管理系統 · 前端＋後端 RBAC</div>
+      <h2>管理人員複核：佇列 → 複核 → 結案</h2>
+      <p class="desc">以 <code>manager01</code> 登入後台，開啟待複核佇列中剛才那筆逾時案件，檢視照片與判定明細，選擇複核結果「確認異常」、填寫備註後送出，案件結案為 <code>CLOSED</code>。</p>
+      <div class="videowrap">
+        <video src="clips/admin.mp4" poster="clips/admin_poster.jpg" controls autoplay muted loop playsinline></video>
+      </div>
+      <ul class="steps">
+        <li>後台登入</li><li>待複核佇列</li><li>開啟案件</li><li>檢視照片/明細</li><li>選複核結果</li><li>送出結案</li>
+      </ul>
+      <p class="dl">下載：<a href="clips/admin.mp4">MP4</a><a href="clips/admin.gif">GIF</a></p>
+    </div>
+  </div>
+
+  <div class="note"><strong>兩段是連續的</strong>：稽查員存入的逾時案件（<code>REVIEW_REQUIRED</code>）即為後台複核影片中處理的那一筆，完整示範了「現場開單 → 後端重算判定 → 後台複核結案」的端到端資料流。判定、重複、複核皆由真實後端 API 計算，非前端假資料。</div>
+</main>
+</body>
+</html>
