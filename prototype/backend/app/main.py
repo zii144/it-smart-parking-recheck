@@ -42,7 +42,6 @@ Endpoints:
 """
 from __future__ import annotations
 
-import base64
 import csv
 import io
 import json
@@ -52,7 +51,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -63,6 +62,7 @@ from sqlalchemy.orm import Session
 from . import business_rules as rules
 from . import qr_service
 from .config import get_settings
+from .media import validate_photo
 from .db import get_db, get_setting, init_db, set_setting
 from .models import AdminUser, Case, Inspector, Location, row_to_dict
 from .security import (
@@ -75,6 +75,7 @@ from .security import (
     require_sysadmin,
     verify_password,
 )
+from .rate_limit import login_throttle
 from .seed import QR_DEMO_CODES, seed
 
 logger = logging.getLogger("parking")
@@ -89,13 +90,17 @@ async def lifespan(app: FastAPI):
     # Postgres deployments get their schema from `alembic upgrade head` (run by
     # the container entrypoint). For a local SQLite run without Alembic, create
     # the tables directly so the app is still usable out of the box.
+    # Fail-fast on insecure production config before anything else (Blocker 3):
+    # a misconfigured deployment should refuse to boot rather than run with a
+    # guessable JWT signing secret.
+    settings.check_runtime_safety()
     if settings.database_url.startswith("sqlite"):
         init_db()
     seed()
-    if settings.jwt_secret_is_default:
+    if settings.jwt_secret_is_weak:
         logger.warning(
-            "JWT_SECRET is the insecure development default. "
-            "Set JWT_SECRET to a strong random value before deploying."
+            "JWT_SECRET is weak or the insecure development default. "
+            "Set JWT_SECRET to a strong random value (>= 16 chars) before deploying."
         )
     yield
 
@@ -113,6 +118,17 @@ app.add_middleware(
 )
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+
+
+# Defense-in-depth for the uploaded-photo path (Blocker 5): stop browsers
+# MIME-sniffing served files into active content. Combined with the upload
+# validator (which rejects SVG and mismatched types), this keeps /uploads from
+# becoming a stored-XSS vector.
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    return response
 
 
 # --------------------------------------------------------------------------
@@ -189,13 +205,48 @@ class SettingsUpdateRequest(BaseModel):
 # --------------------------------------------------------------------------
 # Inspector auth
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Login throttling helpers (Blocker 4)
+# --------------------------------------------------------------------------
+def _client_ip(request: Request) -> str:
+    # Behind a reverse proxy the first X-Forwarded-For entry is the real client.
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _login_keys(username: str, request: Request) -> list[str]:
+    """Throttle on username *and* source IP so neither a targeted account nor a
+    single noisy client can brute-force."""
+    return [f"user:{(username or '').strip().lower()}", f"ip:{_client_ip(request)}"]
+
+
+def _enforce_login_throttle(keys: list[str]) -> None:
+    waits = [w for w in (login_throttle.retry_after(k) for k in keys) if w is not None]
+    if waits:
+        retry = int(max(waits)) + 1
+        raise HTTPException(
+            status_code=429,
+            detail="登入嘗試過於頻繁，請稍後再試",
+            headers={"Retry-After": str(retry)},
+        )
+
+
 @app.post("/api/login")
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    keys = _login_keys(payload.username, request)
+    _enforce_login_throttle(keys)
+
     row = db.scalar(select(Inspector).where(Inspector.username == payload.username))
 
     if row is None or not verify_password(payload.password, row.password):
+        for k in keys:
+            login_throttle.record_failure(k)
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
 
+    for k in keys:
+        login_throttle.reset(k)
     return {
         "token": create_access_token(row.username, ROLE_INSPECTOR),
         "inspector": {
@@ -391,12 +442,12 @@ def create_case(
 
     photo_path = None
     if payload.photo_base64:
-        ext = "jpg"
-        if payload.photo_filename and "." in payload.photo_filename:
-            ext = payload.photo_filename.rsplit(".", 1)[-1][:5]
+        # Validate size + real content type from magic bytes; the extension is
+        # derived from the detected type, never from the client filename
+        # (Blocker 5). Raises 400/413 on bad or oversized input.
+        raw, ext = validate_photo(payload.photo_base64, max_bytes=settings.max_upload_bytes)
         filename = f"{uuid.uuid4().hex}.{ext}"
-        raw = payload.photo_base64.split(",")[-1]  # strip data: prefix if present
-        (UPLOADS_DIR / filename).write_bytes(base64.b64decode(raw))
+        (UPLOADS_DIR / filename).write_bytes(raw)
         photo_path = f"/uploads/{filename}"
 
     case = Case(
@@ -463,12 +514,19 @@ REVIEW_OUTCOMES = {"DATA_ERROR", "DUPLICATE", "NEED_INFO", "CONFIRMED", "DISMISS
 
 
 @app.post("/api/admin/login")
-def admin_login(payload: AdminLoginRequest, db: Session = Depends(get_db)):
+def admin_login(payload: AdminLoginRequest, request: Request, db: Session = Depends(get_db)):
+    keys = _login_keys(payload.username, request)
+    _enforce_login_throttle(keys)
+
     row = db.scalar(select(AdminUser).where(AdminUser.username == payload.username))
 
     if row is None or not verify_password(payload.password, row.password):
+        for k in keys:
+            login_throttle.record_failure(k)
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
 
+    for k in keys:
+        login_throttle.reset(k)
     return {
         "token": create_access_token(row.username, row.role),
         "admin": {

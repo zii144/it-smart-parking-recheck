@@ -41,8 +41,14 @@ services:
   backend:
     build: ./backend
     environment:
+      # APP_ENV=production makes the backend fail-fast if JWT_SECRET is weak or
+      # a known placeholder (Blocker 3). The `:?` below also makes compose
+      # itself refuse to start unless JWT_SECRET is provided (e.g. via a .env
+      # file next to this one - see backend/.env.example), so the old insecure
+      # placeholder can never reach a deployment.
+      APP_ENV: production
       DATABASE_URL: postgresql+psycopg2://parking:parking@db:5432/parking
-      JWT_SECRET: ${JWT_SECRET:-please-change-me-before-deploying}
+      JWT_SECRET: ${JWT_SECRET:?set a strong JWT_SECRET (>= 16 chars) before deploying}
       JWT_EXPIRE_MINUTES: "720"
       CORS_ALLOW_ORIGINS: http://localhost:8080
       PARKING_UPLOADS_DIR: /app/data/uploads
