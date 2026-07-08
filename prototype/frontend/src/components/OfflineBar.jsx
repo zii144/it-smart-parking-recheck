@@ -11,7 +11,7 @@ export default function OfflineBar({ online, onToggle, pendingCount, onSyncNow, 
           </span>
         </span>
         {online ? <Wifi size={14} /> : <WifiOff size={14} />}
-        {online ? "目前有網路" : "模擬離線（無網路）"}
+        {online ? "目前有網路" : "目前離線（無網路）"}
       </label>
       {pendingCount > 0 && (
         <span className="pending-chip">

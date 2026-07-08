@@ -28,6 +28,7 @@ from app.config import get_settings  # noqa: E402
 from app.db import engine, init_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Base  # noqa: E402
+from app.rate_limit import login_throttle  # noqa: E402
 from app.seed import seed  # noqa: E402
 
 
@@ -36,11 +37,14 @@ def client() -> TestClient:
     """A TestClient backed by a freshly-created, freshly-seeded database.
 
     Dropping and recreating per test keeps them fully independent (no shared
-    rows leaking across tests).
+    rows leaking across tests). The login throttle is in-process global state,
+    so reset it too, or a failed-login test would leak a lockout into later
+    tests that reuse the same testclient IP.
     """
     Base.metadata.drop_all(bind=engine)
     init_db()
     seed(force=True)
+    login_throttle.reset()
     return TestClient(app)
 
 

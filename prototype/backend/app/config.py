@@ -33,18 +33,51 @@ def _default_database_url() -> str:
     return f"sqlite:///{sqlite_path}"
 
 
+_DEV_JWT_SECRET = "dev-insecure-change-me"
+
+# Obvious placeholder secrets that must never reach production. Compared
+# case-insensitively; the minimum-length check in check_runtime_safety catches
+# the long tail of weak values these don't enumerate.
+_KNOWN_WEAK_JWT_SECRETS = {
+    _DEV_JWT_SECRET,
+    "please-change-me-before-deploying",
+    "change-me",
+    "changeme",
+    "secret",
+    "test-secret",
+}
+_MIN_JWT_SECRET_LEN = 16
+
+
 class Settings:
     def __init__(self) -> None:
+        # Deployment environment. Production tightens safety checks (see
+        # check_runtime_safety) that only warn in development.
+        self.app_env: str = os.environ.get("APP_ENV", "development").strip().lower()
+
         self.database_url: str = os.environ.get("DATABASE_URL", _default_database_url())
 
         self.uploads_dir: Path = Path(
             os.environ.get("PARKING_UPLOADS_DIR", str(BASE_DIR / "uploads"))
         )
 
+        # Uploaded photo cap (Blocker 5): decoded bytes above this are rejected
+        # with 413 before anything is written to disk.
+        self.max_upload_bytes: int = int(
+            os.environ.get("MAX_UPLOAD_BYTES", str(8 * 1024 * 1024))
+        )
+
+        # Login throttling (Blocker 4): after `login_max_attempts` failures
+        # within `login_window_seconds`, that username/IP is locked out for
+        # `login_lockout_seconds`.
+        self.login_max_attempts: int = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
+        self.login_window_seconds: int = int(os.environ.get("LOGIN_WINDOW_SECONDS", "300"))
+        self.login_lockout_seconds: int = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))
+
         # JWT signing. HS256 with a shared secret. The dev default is clearly
-        # marked as insecure; production MUST set JWT_SECRET (the app warns at
-        # startup if it's left at the default).
-        self.jwt_secret: str = os.environ.get("JWT_SECRET", "dev-insecure-change-me")
+        # insecure; in production the app refuses to boot unless JWT_SECRET is
+        # set to a strong value (see check_runtime_safety).
+        self.jwt_secret: str = os.environ.get("JWT_SECRET", _DEV_JWT_SECRET)
         self.jwt_algorithm: str = "HS256"
         self.jwt_expire_minutes: int = int(os.environ.get("JWT_EXPIRE_MINUTES", "720"))
 
@@ -76,8 +109,33 @@ class Settings:
         self.qr_mock_site_enabled: bool = _env_bool("QR_MOCK_SITE_ENABLED", True)
 
     @property
+    def is_production(self) -> bool:
+        return self.app_env in ("production", "prod")
+
+    @property
     def jwt_secret_is_default(self) -> bool:
-        return self.jwt_secret == "dev-insecure-change-me"
+        return self.jwt_secret == _DEV_JWT_SECRET
+
+    @property
+    def jwt_secret_is_weak(self) -> bool:
+        """True if the signing secret is a known placeholder or too short."""
+        secret = (self.jwt_secret or "").strip()
+        return secret.lower() in _KNOWN_WEAK_JWT_SECRETS or len(secret) < _MIN_JWT_SECRET_LEN
+
+    def check_runtime_safety(self) -> None:
+        """Fail-fast on insecure production configuration (Blocker 3).
+
+        Raised at startup (from the app lifespan) so a misconfigured
+        deployment refuses to boot rather than silently running with a
+        guessable token-signing secret. In development this is a no-op; the
+        caller logs a warning instead.
+        """
+        if self.is_production and self.jwt_secret_is_weak:
+            raise RuntimeError(
+                "Refusing to start in production with a weak or default JWT_SECRET. "
+                f"Set JWT_SECRET to a strong random value of at least "
+                f"{_MIN_JWT_SECRET_LEN} characters (APP_ENV=production)."
+            )
 
 
 @lru_cache

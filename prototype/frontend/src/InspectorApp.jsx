@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ParkingCircle, LogOut, ArrowLeft, Save, Loader2, PartyPopper, ListChecks, ShieldHalf } from "lucide-react";
 import "./styles.css";
 import { api, ApiError, clearAuthToken } from "./api";
@@ -48,7 +48,14 @@ export default function InspectorApp() {
   const [inspector, setInspector] = useState(null);
   const [step, setStep] = useState("login");
   const [draft, setDraft] = useState(emptyDraft());
-  const [online, setOnline] = useState(true);
+  // Real network status from the browser (Blocker 7): seed from
+  // navigator.onLine and keep it in sync with the online/offline events instead
+  // of a purely manual switch. The header toggle stays as a manual override so
+  // "offline" can still be forced for a demo, but real connectivity changes now
+  // drive the state on their own.
+  const [online, setOnline] = useState(
+    () => (typeof navigator !== "undefined" ? navigator.onLine : true)
+  );
   const [queue, setQueue] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -56,8 +63,29 @@ export default function InspectorApp() {
   const [saveMessage, setSaveMessage] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Keep a stable ref to the latest sync function so the (mount-once) network
+  // listeners can trigger a flush without re-subscribing every render.
+  const syncNowRef = useRef(null);
+
   useEffect(() => {
     setQueue(loadQueue());
+  }, []);
+
+  // Track real connectivity and auto-flush the offline queue on reconnect.
+  useEffect(() => {
+    function goOnline() {
+      setOnline(true);
+      syncNowRef.current?.();
+    }
+    function goOffline() {
+      setOnline(false);
+    }
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
   }, []);
 
   function buildPayload() {
@@ -135,7 +163,10 @@ export default function InspectorApp() {
     setStep("list");
   }
 
+  // Exposed to the network-status listener via a ref (assigned below) so a
+  // reconnect can auto-flush the queue.
   async function handleSyncNow() {
+    if (syncing) return;
     setSyncing(true);
     const items = loadQueue();
     for (const item of items) {
@@ -153,6 +184,9 @@ export default function InspectorApp() {
     setRefreshKey((k) => k + 1);
     setSyncing(false);
   }
+  // Refresh the ref every render so the network listener always calls the
+  // latest closure (current queue/syncing state).
+  syncNowRef.current = handleSyncNow;
 
   function startNewCase() {
     setDraft(emptyDraft());

@@ -23,13 +23,22 @@ from datetime import date, datetime, timedelta
 #   inspector code "8435D"
 #   time segment  "095253" -> 09:52:53
 #
-# NOTE (documented limitation, not silently guessed): the source spec only
-# gives this single example, where month is a *single* digit. It does not
-# define how two-digit months (10/11/12) are encoded, so this prototype only
-# accepts months 1-9. Flag this with the product owner before relying on it
-# for October-December tickets.
+# Month is variable-width (1 or 2 digits) so October-December (10/11/12)
+# tickets parse correctly, not just 1-9. The encoding stays unambiguous
+# because every other field is fixed-width: after the leading "Q" there are
+# exactly day(2) + inspector_code(5) + HH(2) + MM(2) + SS(2) = 13 trailing
+# characters, so whatever digits remain in the middle are the month. The
+# single-digit example from the spec (Q7028435D095253) still parses; a
+# two-digit month simply makes the ticket one character longer
+# (Q12028435D095253). The regex resolves this by backtracking on the 1-2 digit
+# month against the fixed-width tail.
+#
+# ASSUMPTION (still worth confirming with the ticket-issuing authority): that
+# two-digit months are encoded inline this way rather than, say, zero-padded to
+# a fixed two digits for all months. If the real encoding differs, only this
+# pattern needs to change.
 TICKET_NO_PATTERN = re.compile(
-    r"^Q(?P<month>[1-9])(?P<day>\d{2})(?P<inspector_code>[0-9A-Za-z]{5})"
+    r"^Q(?P<month>\d{1,2})(?P<day>\d{2})(?P<inspector_code>[0-9A-Za-z]{5})"
     r"(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})$"
 )
 
@@ -66,6 +75,8 @@ def parse_ticket_no(ticket_no: str) -> ParsedTicketNo:
     minute = int(match.group("minute"))
     second = int(match.group("second"))
 
+    if not (1 <= month <= 12):
+        raise TicketParseError(f"帳單編號月份錯誤：month={month}")
     if not (1 <= day <= 31):
         raise TicketParseError(f"帳單編號日期錯誤：day={day}")
     if not (0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
