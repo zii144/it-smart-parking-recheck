@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>示範 QR Code － 停車單稽查系統</title>
+<style>
+  :root {
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 60px;
+    font-family: -apple-system, "Inter", "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #f3f5f9;
+    color: #0f1720;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 6px;
+  }
+  p.intro {
+    color: #64748b;
+    font-size: 14px;
+    max-width: 640px;
+    line-height: 1.6;
+    margin: 0 0 24px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    max-width: 960px;
+  }
+  .tile {
+    background: #fff;
+    border: 1px solid #e2e6ed;
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(15, 23, 32, 0.06);
+  }
+  .tile img {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    image-rendering: pixelated;
+    margin-bottom: 10px;
+  }
+  .tile .code {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+  .tile .desc {
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.5;
+  }
+  .note {
+    max-width: 640px;
+    margin-top: 28px;
+    font-size: 13px;
+    color: #64748b;
+    background: #fff;
+    border: 1px dashed #e2e6ed;
+    border-radius: 10px;
+    padding: 14px 16px;
+    line-height: 1.7;
+  }
+  .note code {
+    background: #f3f5f9;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+  <h1>停車單稽查系統 － 示範 QR Code</h1>
+  <p class="intro">
+    在另一台裝置（例如筆電）開啟這個頁面，然後用手機上的稽查員 APP 對準下列任一張圖片掃描，
+    即可實際測試相機掃描功能（而不是只點選 APP 內建的示範按鈕）。每組代碼對應的判定情境與
+    <code>backend/app/seed.py</code> 的 <code>QR_DEMO_CODES</code> 完全一致。
+  </p>
+  <div class="grid" id="grid"></div>
+  <div class="note">
+    這些圖片是用 <code>scripts/generate-demo-qr.mjs</code>（<code>qrcode</code> 套件）產生的真實 QR Code，
+    內容就是代碼本身的文字（例如 <code>QR-A1001</code>），掃描後會呼叫與示範按鈕相同的
+    <code>POST /api/qr/scan</code> API。若之後 <code>seed.py</code> 的示範代碼有異動，重新執行
+    <code>npm run generate-demo-qr</code> 即可重新產生對應圖片。
+  </div>
+  <script>
+    fetch("/demo-qr/manifest.json")
+      .then((r) => r.json())
+      .then((items) => {
+        const grid = document.getElementById("grid");
+        for (const item of items) {
+          const tile = document.createElement("div");
+          tile.className = "tile";
+          tile.innerHTML = `
+            <img src="/${item.file}" alt="${item.code}" />
+            <div class="code">${item.code}</div>
+            <div class="desc">${item.desc}</div>
+          `;
+          grid.appendChild(tile);
+        }
+      })
+      .catch(() => {
+        document.getElementById("grid").textContent =
+          "找不到示範 QR Code，請先在 prototype/frontend 執行 npm run generate-demo-qr。";
+      });
+  </script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+parking.db
+parking.db-journal
+uploads/*
+!uploads/.gitkeep
+.venv/

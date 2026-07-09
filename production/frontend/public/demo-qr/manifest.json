@@ -1,0 +1,32 @@
+[
+  {
+    "code": "QR-A1001",
+    "desc": "成功讀取・符合規定・會觸發重複警示",
+    "file": "demo-qr/QR-A1001.png"
+  },
+  {
+    "code": "QR-A1002",
+    "desc": "成功讀取・開單逾時",
+    "file": "demo-qr/QR-A1002.png"
+  },
+  {
+    "code": "QR-A1003",
+    "desc": "成功讀取・資料異常",
+    "file": "demo-qr/QR-A1003.png"
+  },
+  {
+    "code": "QR-A1004",
+    "desc": "成功讀取・符合規定・無重複",
+    "file": "demo-qr/QR-A1004.png"
+  },
+  {
+    "code": "QR-A1005",
+    "desc": "QR 解碼成功但查詢頁讀取失敗",
+    "file": "demo-qr/QR-A1005.png"
+  },
+  {
+    "code": "QR-BAD-SCAN",
+    "desc": "模擬掃描失敗（無法辨識的 QR）",
+    "file": "demo-qr/QR-BAD-SCAN.png"
+  }
+]
