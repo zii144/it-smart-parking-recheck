@@ -17,9 +17,32 @@
 
 ## 執行方式
 
-有兩種跑法：本機直接跑（開發用，有 hot reload）、或用 Docker（一個指令跑完整套，不需要裝 Python/Node）。
+有三種跑法：**開發 CLI**（推薦，一個指令同時跑起前後端）、本機手動分開跑（了解底層流程用）、或用 Docker（一個指令跑完整套，不需要裝 Python/Node）。
 
-### 方式一：本機直接跑
+### 方式零（推薦）：開發 CLI `dev.sh`
+
+不想用 Docker、又懶得開兩個終端機分別啟動前後端時，用 `prototype/dev.sh`。它會用一個指令同時跑起 FastAPI 後端與 Vite 前端，日誌以 `[backend]` / `[frontend]` 標色前綴交錯輸出，按一次 <kbd>Ctrl-C</kbd> 兩者一起乾淨關閉。
+
+```bash
+cd prototype
+./dev.sh setup     # 一次性：建立 venv、安裝前後端相依套件
+./dev.sh up        # 同時啟動前後端（Ctrl-C 一起停）
+```
+
+啟動後會印出可直接點的網址（稽查員 APP、後台、API 文件）。其他常用子指令：
+
+| 指令 | 說明 |
+| --- | --- |
+| `./dev.sh doctor` | 檢查 Python / Node 版本與相依套件狀態（Node 需 ≥ 20.19，CI 用 22；nvm 使用者記得 `nvm use 22`） |
+| `./dev.sh backend` / `frontend` | 只跑其中一個 |
+| `./dev.sh status` / `stop` | 查看 / 停止佔用開發埠的服務 |
+| `./dev.sh test [backend\|frontend\|all]` | 跑測試（後端 pytest、前端 lint+build） |
+| `./dev.sh reset-db` | 刪除開發用 SQLite（下次啟動重新植入示範資料） |
+| `./dev.sh clean` | 移除 venv、node_modules 與開發 DB |
+
+也提供 `Makefile` 包裝：`make setup`、`make up`、`make status`、`make test-all` 等（`make help` 看全部）。埠與主機可用環境變數覆寫，例如 `BE_PORT=9000 FE_PORT=5200 ./dev.sh up`。完整指令列表見 `./dev.sh --help`。
+
+### 方式一：本機直接跑（手動）
 
 **後端**
 
