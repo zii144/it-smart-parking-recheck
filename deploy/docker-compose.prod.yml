@@ -1,0 +1,74 @@
+# Production stack for the Parking Ticket Inspection System.
+#
+# This is deliberately separate from prototype/docker-compose.yml (the dev
+# stack). It builds from the promoted ../production tree, runs with
+# production-hardened settings from deploy/.env.production, and — unlike the
+# dev stack — does NOT publish the backend port and does NOT seed demo data.
+#
+# Drive it through the root pipeline:  ./pipeline.sh deploy   (never `docker
+# compose up` directly, so the env/secret preflight always runs).
+#
+# ${VAR:?msg} entries make compose refuse to start if a required secret is
+# missing — a second safety net behind the app's own APP_ENV=production
+# fail-fast on a weak JWT_SECRET.
+
+name: parking-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in deploy/.env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-parking}
+    volumes:
+      - prod_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-parking}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ../production/backend
+    image: parking-backend:${TAG:-latest}
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-parking}
+      JWT_SECRET: ${JWT_SECRET:?set a strong JWT_SECRET (>= 16 chars) in deploy/.env.production}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-720}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:?set CORS_ALLOW_ORIGINS to your public origin(s)}
+      # Production hardening: no demo accounts, no mock QR site, real QR fetch
+      # gated to an explicit host allow-list.
+      SEED_DEMO_DATA: "false"
+      QR_DEMO_MODE: "false"
+      QR_MOCK_SITE_ENABLED: "false"
+      QR_QUERY_ALLOWED_HOSTS: ${QR_QUERY_ALLOWED_HOSTS:-}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
+      LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-300}
+      LOGIN_LOCKOUT_SECONDS: ${LOGIN_LOCKOUT_SECONDS:-300}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-8388608}
+      PARKING_UPLOADS_DIR: /app/data/uploads
+    volumes:
+      - prod_uploads:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    # Note: no `ports:` — the backend is only reachable inside the compose
+    # network, via the nginx frontend. Nothing on the host talks to it directly.
+    restart: unless-stopped
+
+  frontend:
+    build: ../production/frontend
+    image: parking-frontend:${TAG:-latest}
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  prod_pgdata:
+  prod_uploads:

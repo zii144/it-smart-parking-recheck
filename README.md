@@ -283,3 +283,30 @@ sequenceDiagram
 ## 專案現況
 
 除本設計文件外，`prototype/` 目錄下已有一份可執行的原型，涵蓋稽查員 APP、後台管理系統（管理人員與系統管理員已分權為兩組登入）與共用的後端（FastAPI + SQLAlchemy，本機用 SQLite、部署用 PostgreSQL），並可用 Docker 一鍵啟動。原型優先驗證本文件的核心流程、狀態機與判定規則，並已陸續補上生產強化：bcrypt 密碼、JWT 與端點角色分權、CORS 白名單、Alembic 遷移、QR 查詢網站的真實抓取＋解析（含 SSRF 防護）、真實 GPS 定位擷取與存查，以及 59 個 `pytest` 測試與 CI。剩餘的刻意簡化（例如離線偵測）與原因說明見 [`prototype/README.md`](prototype/README.md) 的「與狀態圖／範圍的簡化說明」章節。
+
+## 專案結構與生產部署管線
+
+倉庫在根目錄以一支管線 `pipeline.sh` 把「開發原型」與「生產部署」分開：
+
+| 目錄 | 角色 |
+| --- | --- |
+| `prototype/` | 單一開發來源（含 `prototype/dev.sh` 開發 CLI，見其 README） |
+| `production/` | 由原型**晉級**而來、可部署的複本（由 `update-production` 產生／更新） |
+| `deploy/` | 生產用 `docker-compose.prod.yml` 與 `.env.production`（機密，git 忽略） |
+
+**生產與原型的差異（由 `deploy/docker-compose.prod.yml` 強制）**：`APP_ENV=production`（弱／預設 `JWT_SECRET` 直接拒絕啟動）、`SEED_DEMO_DATA=false`（不建立任何示範帳號）、`QR_DEMO_MODE=false` 與 `QR_MOCK_SITE_ENABLED=false`（關閉示範 QR 與模擬查詢站）、後端**不對外開埠**（僅由前端 nginx 反向代理），機密一律由 `deploy/.env.production` 注入且缺漏即拒絕啟動。
+
+### 常用指令（`./pipeline.sh <cmd>`，或 `make <target>`）
+
+```bash
+cp deploy/.env.production.example deploy/.env.production   # 填入 REQUIRED 值
+./pipeline.sh doctor              # 檢查 Docker、production/、.env.production
+./pipeline.sh update-production   # 晉級 prototype/ → production/（先跑測試把關）
+./pipeline.sh build-production    # 建置帶版號（git SHA）的映像
+./pipeline.sh deploy              # 啟動生產堆疊並健康檢查
+./pipeline.sh create-admin <帳號> # 生產無示範帳號 → 建立第一個真實管理員
+```
+
+其他：`diff`（預覽晉級變更）、`release`（晉級→建置→部署一次到位）、`migrate`、`status`、`logs`、`verify`、`config`、`rollback <tag>`、`down`。完整清單見 `./pipeline.sh --help`。
+
+> 晉級流程：修改一律在 `prototype/` 進行並驗證，`update-production` 會先跑後端測試通過才把程式碼同步進 `production/`（排除 `.venv`、`node_modules`、資料庫、`manual/`、開發用 `dev.sh` 等），並寫入 `production/PROMOTION.txt` 記錄來源 commit 與時間，供審閱後提交。

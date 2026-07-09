@@ -1,0 +1,147 @@
+import { useMemo, useState } from "react";
+import { ClipboardCheck, CheckCircle2, FileWarning, PenLine, ArrowLeft, ArrowRight } from "lucide-react";
+
+const EMPTY = {
+  ticket_no: "",
+  plate_no: "",
+  amount: "",
+  due_date: "",
+  parking_date: "",
+  parking_start: "",
+  parking_end: "",
+};
+
+function toDatetimeLocal(iso) {
+  if (!iso) return "";
+  return iso.length >= 16 ? iso.slice(0, 16) : iso;
+}
+
+export default function ConfirmForm({ scanResult, onConfirmed, onBack }) {
+  const initial = useMemo(() => {
+    if (scanResult.status === "success") {
+      const t = scanResult.ticket;
+      return {
+        ticket_no: t.ticket_no,
+        plate_no: t.plate_no,
+        amount: String(t.amount),
+        due_date: t.due_date,
+        parking_date: t.parking_date,
+        parking_start: toDatetimeLocal(t.parking_start),
+        parking_end: toDatetimeLocal(t.parking_end),
+      };
+    }
+    return EMPTY;
+  }, [scanResult]);
+
+  const [fields, setFields] = useState(initial);
+
+  function update(key, value) {
+    setFields((f) => ({ ...f, [key]: value }));
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+
+    const changedKeys = Object.keys(initial).filter((k) => (initial[k] || "") !== (fields[k] || ""));
+    const isAutoFilled = scanResult.status === "success";
+    const manualCorrected = isAutoFilled && changedKeys.length > 0;
+    const originalValues = manualCorrected
+      ? Object.fromEntries(changedKeys.map((k) => [k, initial[k]]))
+      : null;
+
+    onConfirmed({
+      fields: {
+        ...fields,
+        amount: Number(fields.amount),
+        parking_start: fields.parking_start.length === 16 ? `${fields.parking_start}:00` : fields.parking_start,
+        parking_end: fields.parking_end.length === 16 ? `${fields.parking_end}:00` : fields.parking_end,
+      },
+      manualCorrected,
+      originalValues,
+    });
+  }
+
+  return (
+    <div className="card">
+      <div className="card-icon-heading">
+        <span className="icon-badge">
+          <ClipboardCheck size={18} />
+        </span>
+        <h2>確認資料內容</h2>
+      </div>
+
+      {scanResult.status === "fetch_failed" && (
+        <div className="info-box">
+          <FileWarning size={16} />
+          <div>
+            <p style={{ margin: "0 0 6px" }}>APP 無法讀取 QR 查詢頁資料，請依查詢頁內容手動填寫：</p>
+            <p className="muted small" style={{ margin: "0 0 6px" }}>查詢網址：{scanResult.query_url}</p>
+            <pre className="page-preview">{scanResult.page_preview}</pre>
+          </div>
+        </div>
+      )}
+      {scanResult.status === "scan_failed" && (
+        <div className="info-box">
+          <PenLine size={16} />
+          <span>QR Code 掃描失敗，請依紙本停車單內容人工輸入。</span>
+        </div>
+      )}
+      {scanResult.status === "success" && (
+        <div className="info-box success">
+          <CheckCircle2 size={16} />
+          <span>已自動帶入 QR 查詢頁資料，請確認內容是否正確。</span>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <label>
+          帳單編號
+          <input value={fields.ticket_no} onChange={(e) => update("ticket_no", e.target.value)} required />
+        </label>
+        <label>
+          車牌號碼
+          <input value={fields.plate_no} onChange={(e) => update("plate_no", e.target.value)} required />
+        </label>
+        <label>
+          應繳金額
+          <input type="number" value={fields.amount} onChange={(e) => update("amount", e.target.value)} required />
+        </label>
+        <label>
+          繳費期限
+          <input type="date" value={fields.due_date} onChange={(e) => update("due_date", e.target.value)} required />
+        </label>
+        <label>
+          停車日期
+          <input type="date" value={fields.parking_date} onChange={(e) => update("parking_date", e.target.value)} required />
+        </label>
+        <label>
+          停車開始時間
+          <input
+            type="datetime-local"
+            value={fields.parking_start}
+            onChange={(e) => update("parking_start", e.target.value)}
+            required
+          />
+        </label>
+        <label>
+          停車結束時間
+          <input
+            type="datetime-local"
+            value={fields.parking_end}
+            onChange={(e) => update("parking_end", e.target.value)}
+            required
+          />
+        </label>
+
+        <div className="button-row">
+          <button type="button" className="btn-secondary" onClick={onBack}>
+            <ArrowLeft size={15} /> 返回重新掃描
+          </button>
+          <button type="submit" className="btn-primary">
+            確認資料，計算開單時效 <ArrowRight size={15} />
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
