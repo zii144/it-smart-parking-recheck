@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { MapPin, Navigation, ArrowRight } from "lucide-react";
+import { MapPin, Navigation, ArrowRight, ArrowLeft } from "lucide-react";
 import { api } from "../api";
 import Spinner from "./Spinner";
 import SearchableSelect from "./SearchableSelect";
 
-export default function LocationSelect({ onSelected }) {
+export default function LocationSelect({ onSelected, onBack }) {
   const [districts, setDistricts] = useState([]);
   // Track selections by name (not array index) so they stay valid as the
   // seeded location data grows or is reordered.
@@ -127,6 +127,11 @@ export default function LocationSelect({ onSelected }) {
         </p>
       )}
       <div className="button-row">
+        {onBack && (
+          <button className="btn-secondary" onClick={onBack}>
+            <ArrowLeft size={15} /> 返回
+          </button>
+        )}
         <button
           className="btn-primary"
           disabled={!ready}
@@ -140,7 +145,7 @@ export default function LocationSelect({ onSelected }) {
             })
           }
         >
-          下一步：掃描停車單 <ArrowRight size={15} />
+          下一步：確認資料 <ArrowRight size={15} />
         </button>
       </div>
     </div>

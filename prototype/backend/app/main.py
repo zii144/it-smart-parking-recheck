@@ -448,7 +448,7 @@ def create_case(
 
     review_required = bool(
         judgement_value in ("OVERDUE", "DATA_ERROR", "PARSE_ERROR")
-        or payload.data_source in ("MANUAL_FROM_QR_PAGE", "MANUAL_FROM_TICKET")
+        or payload.data_source in ("MANUAL_FROM_QR_PAGE", "MANUAL_FROM_TICKET", "OCR")
         or payload.manual_corrected
         or duplicate_warning
     )
@@ -558,6 +558,8 @@ def admin_list_cases(
     duplicate_warning: Optional[bool] = None,
     review_required: Optional[bool] = None,
     district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,  # YYYY-MM-DD, matches created_at day
     q: Optional[str] = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_manager),
@@ -576,6 +578,12 @@ def admin_list_cases(
         stmt = stmt.where(Case.review_required == int(review_required))
     if district:
         stmt = stmt.where(Case.district == district)
+    if inspector:
+        stmt = stmt.where(Case.inspector_username == inspector)
+    if date:
+        # created_at is stored as an ISO string ("2026-07-02T10:20:00"), so a
+        # day filter is a prefix match.
+        stmt = stmt.where(Case.created_at.like(f"{date}%"))
     if q:
         like = f"%{q}%"
         stmt = stmt.where(or_(Case.ticket_no.like(like), Case.plate_no.like(like)))

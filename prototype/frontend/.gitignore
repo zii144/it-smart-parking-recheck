@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# tesseract.js downloaded language data (fetched at runtime)
+*.traineddata

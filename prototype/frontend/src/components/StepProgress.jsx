@@ -1,6 +1,6 @@
 const STEPS = [
+  { key: "qr", label: "取得" },
   { key: "location", label: "地點" },
-  { key: "qr", label: "掃描" },
   { key: "confirm", label: "確認" },
   { key: "judgment", label: "判定" },
   { key: "photo", label: "拍照" },

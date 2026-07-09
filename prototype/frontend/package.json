@@ -15,7 +15,8 @@
     "qr-scanner": "^1.4.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "recharts": "^3.9.1"
+    "recharts": "^3.9.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
