@@ -179,6 +179,20 @@ class ReviewRequest(BaseModel):
     reviewed_by: str
 
 
+class AdminCaseUpdateRequest(BaseModel):
+    # All optional — only the provided fields are updated (PATCH semantics).
+    ticket_no: Optional[str] = None
+    plate_no: Optional[str] = None
+    amount: Optional[float] = None
+    due_date: Optional[str] = None
+    parking_date: Optional[str] = None
+    parking_start: Optional[str] = None
+    parking_end: Optional[str] = None
+    district: Optional[str] = None
+    road: Optional[str] = None
+    spot_no: Optional[str] = None
+
+
 class InspectorCreateRequest(BaseModel):
     username: str
     password: str
@@ -614,6 +628,88 @@ def admin_review_case(
     db.commit()
     db.refresh(case)
     return row_to_dict(case)
+
+
+# Fields an admin (管理人員) may edit on a case. Derived fields (judgement,
+# issue time, duplicate flag) are recomputed from these, never edited directly.
+_EDITABLE_CASE_FIELDS = (
+    "ticket_no", "plate_no", "amount", "due_date",
+    "parking_date", "parking_start", "parking_end",
+    "district", "road", "spot_no",
+)
+
+
+@app.patch("/api/admin/cases/{case_id}")
+def admin_update_case(
+    case_id: int,
+    payload: AdminCaseUpdateRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_manager),
+):
+    case = db.get(Case, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="案件不存在")
+
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=400, detail="沒有要更新的欄位")
+
+    # A ticket number must stay unique across other cases.
+    if "ticket_no" in data and data["ticket_no"] != case.ticket_no:
+        clash = db.scalar(
+            select(Case).where(Case.ticket_no == data["ticket_no"], Case.id != case_id)
+        )
+        if clash is not None:
+            raise HTTPException(status_code=409, detail="帳單編號已存在於其他案件")
+
+    for field in _EDITABLE_CASE_FIELDS:
+        if field in data:
+            setattr(case, field, data[field])
+
+    # Re-run the authoritative judgement when a field it depends on changed, so
+    # the stored judgement / issue time / time diff never drift from the data.
+    if any(f in data for f in ("ticket_no", "parking_date", "parking_start")):
+        judgement, error = _run_judgement(db, case.ticket_no, case.parking_date, case.parking_start)
+        if error:
+            case.judgement = "PARSE_ERROR"
+            case.issue_datetime = None
+            case.time_diff_minutes = None
+        else:
+            case.judgement = judgement["judgement"]
+            case.issue_datetime = judgement["issue_datetime"]
+            case.time_diff_minutes = judgement["time_diff_minutes"]
+
+    # Keep the duplicate flag consistent with the (possibly new) ticket number.
+    case.duplicate_warning = int(
+        db.scalar(select(Case).where(Case.ticket_no == case.ticket_no, Case.id != case_id))
+        is not None
+    )
+
+    db.commit()
+    db.refresh(case)
+    return row_to_dict(case)
+
+
+@app.delete("/api/admin/cases/{case_id}")
+def admin_delete_case(
+    case_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_manager),
+):
+    case = db.get(Case, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="案件不存在")
+
+    # Best-effort cleanup of the stored photo file (ignore if already gone).
+    if case.photo_path:
+        try:
+            (UPLOADS_DIR / case.photo_path.rsplit("/", 1)[-1]).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    db.delete(case)
+    db.commit()
+    return {"ok": True, "deleted_id": case_id}
 
 
 @app.get("/api/admin/stats")

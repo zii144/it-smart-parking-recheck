@@ -96,17 +96,39 @@ body {
   font-size: 13px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Both actions are ghost pills — but one is an <a> (後台管理) and one is a
+   <button> (登出). The base button padding/radius only hits <button>, so
+   normalise the box model here for both, and kill the anchor's underline. */
 .header-actions .btn-ghost {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: rgba(255, 255, 255, 0.85);
+  padding: 7px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.9);
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .header-actions .btn-ghost:hover {
   background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.3);
+  text-decoration: none;
+}
+
+.header-actions .btn-ghost svg {
+  opacity: 0.85;
 }
 
 .app-main {
@@ -208,6 +230,141 @@ select:focus {
   box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
+/* ---------- Searchable select (combobox) ---------- */
+.field {
+  margin-bottom: 14px;
+}
+
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.combo {
+  position: relative;
+  margin-top: 6px;
+}
+
+.combo-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--color-ink);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.combo-control:hover:not(:disabled) {
+  border-color: #cdd4df;
+}
+
+.combo-control:disabled {
+  background: var(--color-bg);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.combo-placeholder {
+  color: var(--color-muted);
+}
+
+.combo-chevron {
+  color: var(--color-muted);
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+.combo-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.combo-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.combo-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-muted);
+}
+.combo-search input {
+  border: none;
+  margin: 0;
+  padding: 2px 0;
+  font-size: 14px;
+  box-shadow: none;
+}
+.combo-search input:focus {
+  box-shadow: none;
+}
+
+.combo-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.combo-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink);
+  font-size: 15px;
+  font-weight: 400;
+  text-align: left;
+}
+.combo-option:hover {
+  background: var(--color-bg);
+}
+.combo-option.is-selected {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.combo-option.is-selected svg {
+  color: var(--color-primary);
+}
+
+.combo-empty {
+  padding: 14px 12px;
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.combo-count {
+  padding: 6px 12px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
 input::placeholder {
   color: #9aa5b1;
 }
@@ -273,6 +430,32 @@ button:active {
   background: transparent;
   border: 1px solid var(--color-border);
   color: var(--color-ink);
+}
+
+.btn-danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid transparent;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #f9dbde;
+  border-color: var(--color-danger);
+}
+
+/* Two-column editable case fields in the admin detail modal. */
+.edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+  margin: 4px 0 8px;
+}
+.edit-grid label {
+  margin-bottom: 12px;
+}
+@media (max-width: 520px) {
+  .edit-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .btn-block {
