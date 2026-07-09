@@ -61,12 +61,6 @@ export default function LocationSelect({ onSelected }) {
     setSpot(r0?.spots[0] ?? "");
   }
 
-  function changeRoad(name) {
-    setRoadName(name);
-    const r = roads.find((x) => x.road === name);
-    setSpot(r?.spots[0] ?? "");
-  }
-
   if (loading) {
     return (
       <div className="card">
@@ -93,20 +87,38 @@ export default function LocationSelect({ onSelected }) {
         options={districts.map((d) => d.district)}
         searchPlaceholder="搜尋行政區…"
       />
-      <SearchableSelect
-        label="路段"
-        value={roadName}
-        onChange={changeRoad}
-        options={roads.map((r) => r.road)}
-        searchPlaceholder="搜尋路段…"
-      />
-      <SearchableSelect
-        label="停車格"
-        value={spot}
-        onChange={setSpot}
-        options={spots}
-        searchPlaceholder="搜尋停車格…"
-      />
+      <div className="field">
+        <span className="field-label">路段</span>
+        <input
+          list="road-suggestions"
+          value={roadName}
+          onChange={(e) => setRoadName(e.target.value)}
+          placeholder="輸入路段名稱"
+        />
+        {roads.length > 0 && (
+          <datalist id="road-suggestions">
+            {roads.map((r) => (
+              <option key={r.road} value={r.road} />
+            ))}
+          </datalist>
+        )}
+      </div>
+      <div className="field">
+        <span className="field-label">停車格</span>
+        <input
+          list="spot-suggestions"
+          value={spot}
+          onChange={(e) => setSpot(e.target.value)}
+          placeholder="輸入停車格編號"
+        />
+        {spots.length > 0 && (
+          <datalist id="spot-suggestions">
+            {spots.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        )}
+      </div>
 
       {gps && (
         <p className="muted small" style={{ display: "flex", alignItems: "center", gap: 6 }}>
