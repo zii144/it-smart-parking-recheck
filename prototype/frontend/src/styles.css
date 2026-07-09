@@ -540,20 +540,31 @@ button:active {
 
 /* ---------- Step progress ---------- */
 
-.step-progress {
+/* Stepper: each item is an equal-width column with the circle centred and its
+   label centred directly beneath it, so circles and labels always line up.
+   Connector lines are the segments beside each circle (hidden at the ends). */
+.stepper {
   display: flex;
-  align-items: center;
-  margin-bottom: 6px;
+  margin: 0 0 20px;
   padding: 0 2px;
 }
 
-.step-progress .step {
-  display: flex;
-  align-items: center;
+.stepper-item {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
 }
 
-.step-progress .step-circle {
+.stepper-rail {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.stepper-dot {
+  flex: 0 0 auto;
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -564,51 +575,43 @@ button:active {
   font-weight: 700;
   background: var(--color-border);
   color: var(--color-muted);
-  flex-shrink: 0;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.step-progress .step.done .step-circle {
+.stepper-item.done .stepper-dot,
+.stepper-item.current .stepper-dot {
   background: var(--color-primary);
-  color: white;
+  color: #fff;
 }
 
-.step-progress .step.current .step-circle {
-  background: var(--color-primary);
-  color: white;
+.stepper-item.current .stepper-dot {
   box-shadow: 0 0 0 4px var(--color-primary-light);
 }
 
-.step-progress .step-line {
+.stepper-seg {
   flex: 1;
   height: 2px;
   background: var(--color-border);
-  margin: 0 4px;
 }
 
-.step-progress .step.done .step-line {
+.stepper-seg.is-active {
   background: var(--color-primary);
 }
 
-.step-progress-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--color-muted);
-  margin: 4px 2px 20px;
+.stepper-seg.is-hidden {
+  visibility: hidden;
 }
 
-.step-progress-labels span {
-  flex: 1;
+.stepper-label {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--color-muted);
   text-align: center;
 }
 
-.step-progress-labels span:first-child {
-  text-align: left;
-}
-
-.step-progress-labels span:last-child {
-  text-align: right;
+.stepper-item.current .stepper-label {
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 /* ---------- QR scan tiles ---------- */
@@ -1082,7 +1085,7 @@ button:active {
     justify-content: center;
   }
 
-  .step-progress-labels span {
+  .stepper-label {
     display: none;
   }
 }
