@@ -18,15 +18,15 @@ import StepBadge from "./components/StepBadge";
 import StepProgress from "./components/StepProgress";
 
 const STEP_STATE_LABEL = {
-  permission: "CHECKING_PERMISSION",
-  list: "READY",
-  location: "LOCATION_SELECTED",
-  qr: "QR_SCANNING",
-  confirm: "CONFIRMING",
-  judgment: "CALCULATING",
-  photo: "PHOTO_CAPTURED",
-  save: "READY_TO_SAVE",
-  done: "CLOSED / REVIEW_REQUIRED",
+  permission: "檢查權限中",
+  list: "待命中",
+  location: "已選擇地點",
+  qr: "掃描 QR Code 中",
+  confirm: "確認資料中",
+  judgment: "計算開單時效中",
+  photo: "已拍照存證",
+  save: "準備儲存",
+  done: "已結案／待複核",
 };
 
 const emptyDraft = () => ({
