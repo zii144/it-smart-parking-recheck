@@ -135,7 +135,7 @@ export default function ConfirmForm({ scanResult, onConfirmed, onBack }) {
 
         <div className="button-row">
           <button type="button" className="btn-secondary" onClick={onBack}>
-            <ArrowLeft size={15} /> 返回重新掃描
+            <ArrowLeft size={15} /> 返回上一步
           </button>
           <button type="submit" className="btn-primary">
             確認資料，計算開單時效 <ArrowRight size={15} />

@@ -7,7 +7,7 @@ import { loadQueue, enqueue, removeFromQueue } from "./offlineQueue";
 import Login from "./components/Login";
 import PermissionCheck from "./components/PermissionCheck";
 import LocationSelect from "./components/LocationSelect";
-import QRScan from "./components/QRScan";
+import AcquireStep from "./components/AcquireStep";
 import ConfirmForm from "./components/ConfirmForm";
 import JudgmentBanner from "./components/JudgmentBanner";
 import PhotoCapture from "./components/PhotoCapture";
@@ -21,7 +21,7 @@ const STEP_STATE_LABEL = {
   permission: "檢查權限中",
   list: "待命中",
   location: "已選擇地點",
-  qr: "掃描 QR Code 中",
+  qr: "取得停車單資料中",
   confirm: "確認資料中",
   judgment: "計算開單時效中",
   photo: "已拍照存證",
@@ -191,7 +191,7 @@ export default function InspectorApp() {
   function startNewCase() {
     setDraft(emptyDraft());
     setSaveMessage(null);
-    setStep("location");
+    setStep("qr");
   }
 
   if (step === "login") {
@@ -254,23 +254,24 @@ export default function InspectorApp() {
           <CaseList inspector={inspector} refreshKey={refreshKey} onNewCase={startNewCase} />
         )}
 
-        {step === "location" && (
-          <LocationSelect
-            onSelected={(loc) => {
-              setDraft((d) => ({ ...d, ...loc }));
-              setStep("qr");
+        {step === "qr" && (
+          <AcquireStep
+            onResult={(res) => {
+              setDraft((d) => ({ ...d, scanResult: res }));
+              setStep("location");
+            }}
+            onManualFallback={() => {
+              setDraft((d) => ({ ...d, scanResult: { status: "scan_failed", dataSource: "MANUAL_FROM_TICKET" } }));
+              setStep("location");
             }}
           />
         )}
 
-        {step === "qr" && (
-          <QRScan
-            onResult={(res) => {
-              setDraft((d) => ({ ...d, scanResult: res }));
-              setStep("confirm");
-            }}
-            onManualFallback={() => {
-              setDraft((d) => ({ ...d, scanResult: { status: "scan_failed", dataSource: "MANUAL_FROM_TICKET" } }));
+        {step === "location" && (
+          <LocationSelect
+            onBack={() => setStep("qr")}
+            onSelected={(loc) => {
+              setDraft((d) => ({ ...d, ...loc }));
               setStep("confirm");
             }}
           />
@@ -279,7 +280,7 @@ export default function InspectorApp() {
         {step === "confirm" && (
           <ConfirmForm
             scanResult={draft.scanResult}
-            onBack={() => setStep("qr")}
+            onBack={() => setStep("location")}
             onConfirmed={({ fields, manualCorrected, originalValues }) => {
               setDraft((d) => ({ ...d, fields, manualCorrected, originalValues }));
               setStep("judgment");
