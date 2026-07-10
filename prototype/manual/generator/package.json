@@ -1,0 +1,14 @@
+{
+  "name": "parking-manual-generator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Drives the app with Playwright to capture step screenshots + flow videos, then builds a zh-TW visual user manual.",
+  "scripts": {
+    "capture": "node capture.mjs",
+    "build-guide": "node build-guide.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.56.0"
+  }
+}
