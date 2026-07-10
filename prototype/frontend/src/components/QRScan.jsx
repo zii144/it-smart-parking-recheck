@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import QrScanner from "qr-scanner";
 import {
   QrCode, CheckCircle2, AlertTriangle, FileWarning, ScanLine, PenLine,
-  Camera, CameraOff, RefreshCw, Zap, ZapOff, ExternalLink, Loader2,
+  Camera, CameraOff, RefreshCw, Zap, ZapOff, ExternalLink, Loader2, Globe,
 } from "lucide-react";
 import { api } from "../api";
 import Spinner from "./Spinner";
@@ -235,7 +235,7 @@ export default function QRScan({ onResult, onManualFallback }) {
     try {
       const res = await api.scanQr(code);
       if (res.status === "success") {
-        onResult({ status: "success", dataSource: "AUTO_QR", ticket: res.ticket });
+        onResult({ status: "success", dataSource: "AUTO_QR", ticket: res.ticket, webInfo: res.web_info || null });
       } else if (res.status === "fetch_failed") {
         onResult({
           status: "fetch_failed",
@@ -293,10 +293,42 @@ export default function QRScan({ onResult, onManualFallback }) {
         </a>{" "}
         顯示上述代碼的真實 QR 圖片，再用本頁相機掃描。
       </p>
+      <TicketUrlInput onScan={doScan} scanning={scanning} />
       <ManualCodeInput onScan={doScan} scanning={scanning} />
       <div className="divider" />
       <button className="btn-link" onClick={onManualFallback}>
         <PenLine size={14} /> 直接人工輸入帳單資料
+      </button>
+    </div>
+  );
+}
+
+// Online query: paste (or let the camera decode) a real 臺北市停車繳費通知單 QR
+// URL; the backend headless worker fetches the query site and auto-fills the
+// ticket fields. This is the same path a real camera scan takes.
+function TicketUrlInput({ onScan, scanning }) {
+  const [url, setUrl] = useState("");
+  const looksLikeUrl = /^https?:\/\//i.test(url.trim());
+  return (
+    <div className="info-box" style={{ display: "block" }}>
+      <p className="small" style={{ margin: "0 0 6px", display: "flex", alignItems: "center", gap: 6 }}>
+        <Globe size={14} /> <strong>線上查詢</strong>：貼上停車單 QR 網址，自動查詢並帶入資料
+      </p>
+      <label style={{ margin: 0 }}>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://parkingfee.pma.gov.taipei/qr?tno=…"
+          inputMode="url"
+        />
+      </label>
+      <button
+        className="btn-secondary"
+        style={{ marginTop: 8 }}
+        disabled={scanning || !looksLikeUrl}
+        onClick={() => onScan(url.trim())}
+      >
+        <Globe size={15} /> 線上查詢帶入
       </button>
     </div>
   );
