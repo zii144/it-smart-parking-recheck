@@ -22,3 +22,15 @@ export function statusLabel(status) {
 export const STATUS_TEXT = Object.fromEntries(
   Object.entries(STATUS_META).map(([k, v]) => [k, v.text])
 );
+
+// Human-readable zh-TW for how a case's data was captured.
+export const SOURCE_TEXT = {
+  AUTO_QR: "QR 自動辨識",
+  MANUAL_FROM_QR_PAGE: "QR 頁面人工輸入",
+  MANUAL_FROM_TICKET: "紙本人工輸入",
+  OCR: "OCR 影像辨識",
+};
+
+export function sourceLabel(source) {
+  return SOURCE_TEXT[source] ?? source ?? "—";
+}

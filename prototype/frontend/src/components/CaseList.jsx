@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ListChecks, PlusCircle, Inbox, ImageIcon } from "lucide-react";
 import { api, BASE } from "../api";
 import Spinner from "./Spinner";
-import { shortDateTime, statusLabel } from "../format";
+import { shortDateTime, statusLabel, sourceLabel } from "../format";
 import Pagination from "./Pagination";
 import { usePagination } from "../usePagination";
 
@@ -97,7 +97,7 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
                       <Pill cls={status.cls}>{status.text}</Pill>
                     </td>
                     <td data-label="來源">
-                      {c.data_source}
+                      {sourceLabel(c.data_source)}
                       {c.manual_corrected ? " (已修正)" : ""}
                     </td>
                     <td data-label="建立時間">{shortDateTime(c.created_at)}</td>
@@ -133,7 +133,7 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
                 <div className="mcard-meta">
                   <Pill cls={status.cls}>{status.text}</Pill>
                   <span className="mcard-tag">
-                    {c.data_source}
+                    {sourceLabel(c.data_source)}
                     {c.manual_corrected ? " · 已修正" : ""}
                   </span>
                   {!!c.review_required && <Pill cls="pill-warn">需複核</Pill>}

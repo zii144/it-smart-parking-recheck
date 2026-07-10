@@ -4,7 +4,7 @@ import {
   HelpCircle, Loader2, Send, Pencil, Trash2, Save,
 } from "lucide-react";
 import { adminApi, BASE } from "../../api";
-import { statusLabel } from "../../format";
+import { statusLabel, sourceLabel } from "../../format";
 
 const JUDGE_LABEL = {
   COMPLIANT: { text: "符合規定", cls: "pill-ok" },
@@ -161,7 +161,7 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
             <li><span>停車時段</span><span>{caseData.parking_start} ~ {caseData.parking_end}</span></li>
             <li><span>解析出的開單時間</span><span>{caseData.issue_datetime ?? "—"}</span></li>
             <li><span>時間差</span><span>{caseData.time_diff_minutes != null ? `${caseData.time_diff_minutes} 分鐘` : "—"}</span></li>
-            <li><span>資料來源</span><span>{caseData.data_source}</span></li>
+            <li><span>資料來源</span><span>{sourceLabel(caseData.data_source)}</span></li>
             <li><span>稽查員</span><span>{caseData.inspector_username}</span></li>
             <li><span>建立時間</span><span>{caseData.created_at}</span></li>
             {caseData.review_outcome && (
