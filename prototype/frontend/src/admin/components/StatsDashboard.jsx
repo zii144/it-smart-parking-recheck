@@ -10,11 +10,11 @@ import Spinner from "../../components/Spinner";
 // because SVG fill attributes are more reliably rendered with literal
 // colors than with var(...) across browsers/renderers.
 const JUDGEMENT_COLORS = {
-  COMPLIANT: "#16a34a",
-  OVERDUE: "#b45309",
-  DATA_ERROR: "#c02b3a",
-  PARSE_ERROR: "#7c3aed",
-  UNKNOWN: "#94a3b8",
+  COMPLIANT: "#159a63",
+  OVERDUE: "#e6a020",
+  DATA_ERROR: "#e0483f",
+  PARSE_ERROR: "#b0651a",
+  UNKNOWN: "#b9b3a8",
 };
 
 const JUDGEMENT_LABELS = {
@@ -26,12 +26,12 @@ const JUDGEMENT_LABELS = {
 };
 
 const STATUS_COLORS = {
-  REVIEW_REQUIRED: "#b45309",
-  REVIEW_NEED_INFO: "#2f6feb",
-  CLOSED: "#16a34a",
+  REVIEW_REQUIRED: "#e6a020",
+  REVIEW_NEED_INFO: "#c9861a",
+  CLOSED: "#159a63",
 };
 
-const BAR_COLOR = "#2f6feb";
+const BAR_COLOR = "#e6a020";
 
 function StatCard({ icon: Icon, label, value, accent }) {
   return (
@@ -98,10 +98,10 @@ export default function StatsDashboard() {
 
       <div className="stat-grid">
         <StatCard icon={Files} label="總案件數" value={stats.total} />
-        <StatCard icon={ClipboardList} label="待複核" value={stats.review_pending} accent="#b45309" />
-        <StatCard icon={Copy} label="重複帳單" value={stats.duplicate_count} accent="#c02b3a" />
+        <StatCard icon={ClipboardList} label="待複核" value={stats.review_pending} accent="#c9861a" />
+        <StatCard icon={Copy} label="重複帳單" value={stats.duplicate_count} accent="#e0483f" />
         <StatCard icon={Timer} label="平均時間差(分)" value={stats.avg_time_diff_minutes ?? "—"} />
-        <StatCard icon={TrendingUp} label="逾時率" value={`${stats.overdue_rate_pct}%`} accent="#b45309" />
+        <StatCard icon={TrendingUp} label="逾時率" value={`${stats.overdue_rate_pct}%`} accent="#c9861a" />
       </div>
 
       <div className="charts-grid">

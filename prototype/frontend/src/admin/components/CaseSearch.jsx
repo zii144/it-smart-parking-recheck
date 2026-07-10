@@ -105,12 +105,12 @@ export default function CaseSearch({ adminUsername }) {
             <tbody>
               {cases.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.ticket_no}</td>
-                  <td>{c.district} {c.road} {c.spot_no}</td>
-                  <td>{c.data_source}</td>
-                  <td>{c.inspector_username}</td>
-                  <td>{c.created_at}</td>
-                  <td>
+                  <td data-label="帳單編號">{c.ticket_no}</td>
+                  <td data-label="地點">{c.district} {c.road} {c.spot_no}</td>
+                  <td data-label="來源">{c.data_source}</td>
+                  <td data-label="稽查員">{c.inspector_username}</td>
+                  <td data-label="建立時間">{c.created_at}</td>
+                  <td className="cell-action">
                     <button className="btn-secondary" onClick={() => setSelected(c)}>
                       <Eye size={13} /> 檢視
                     </button>
