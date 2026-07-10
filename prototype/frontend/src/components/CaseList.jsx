@@ -3,6 +3,8 @@ import { ListChecks, PlusCircle, Inbox, ImageIcon } from "lucide-react";
 import { api, BASE } from "../api";
 import Spinner from "./Spinner";
 import { shortDateTime, statusLabel } from "../format";
+import Pagination from "./Pagination";
+import { usePagination } from "../usePagination";
 
 const JUDGE_LABEL = {
   COMPLIANT: { text: "符合規定", cls: "pill-ok" },
@@ -18,6 +20,7 @@ function Pill({ cls, children }) {
 export default function CaseList({ inspector, refreshKey, onNewCase }) {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { page, setPage, pageSize, setPageSize, pageItems, total, pageCount } = usePagination(cases);
 
   useEffect(() => {
     setLoading(true);
@@ -68,7 +71,7 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
               </tr>
             </thead>
             <tbody>
-              {cases.map((c) => {
+              {pageItems.map((c) => {
                 const judge = JUDGE_LABEL[c.judgement] ?? { text: c.judgement, cls: "pill-neutral" };
                 const status = statusLabel(c.status);
                 return (
@@ -115,7 +118,7 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
         </div>
 
         <ul className="case-list-cards">
-          {cases.map((c) => {
+          {pageItems.map((c) => {
             const judge = JUDGE_LABEL[c.judgement] ?? { text: c.judgement, cls: "pill-neutral" };
             const status = statusLabel(c.status);
             return (
@@ -150,6 +153,11 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
             );
           })}
         </ul>
+
+        <Pagination
+          page={page} pageSize={pageSize} total={total} pageCount={pageCount}
+          onPage={setPage} onPageSize={setPageSize}
+        />
         </>
       )}
     </div>

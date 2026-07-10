@@ -3,6 +3,8 @@ import { Search, Download, Inbox, Eye } from "lucide-react";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
 import CaseDetailPanel from "./CaseDetailPanel";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../usePagination";
 import { shortDateTime } from "../../format";
 
 export default function CaseSearch({ adminUsername }) {
@@ -10,6 +12,7 @@ export default function CaseSearch({ adminUsername }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [filters, setFilters] = useState({ district: "", inspector: "", date: "", q: "" });
+  const { page, setPage, pageSize, setPageSize, pageItems, total, pageCount } = usePagination(cases);
 
   function load() {
     setLoading(true);
@@ -91,36 +94,42 @@ export default function CaseSearch({ adminUsername }) {
           <p>沒有符合條件的案件。</p>
         </div>
       ) : (
-        <div className="table-scroll">
-          <table className="case-table">
-            <thead>
-              <tr>
-                <th>帳單編號</th>
-                <th>地點</th>
-                <th>來源</th>
-                <th>稽查員</th>
-                <th>建立時間</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {cases.map((c) => (
-                <tr key={c.id}>
-                  <td data-label="帳單編號">{c.ticket_no}</td>
-                  <td data-label="地點">{c.district} {c.road} {c.spot_no}</td>
-                  <td data-label="來源">{c.data_source}</td>
-                  <td data-label="稽查員">{c.inspector_username}</td>
-                  <td data-label="建立時間">{shortDateTime(c.created_at)}</td>
-                  <td className="cell-action">
-                    <button className="btn-secondary" onClick={() => setSelected(c)}>
-                      <Eye size={13} /> 檢視
-                    </button>
-                  </td>
+        <>
+          <div className="table-scroll">
+            <table className="case-table">
+              <thead>
+                <tr>
+                  <th>帳單編號</th>
+                  <th>地點</th>
+                  <th>來源</th>
+                  <th>稽查員</th>
+                  <th>建立時間</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pageItems.map((c) => (
+                  <tr key={c.id}>
+                    <td data-label="帳單編號">{c.ticket_no}</td>
+                    <td data-label="地點">{c.district} {c.road} {c.spot_no}</td>
+                    <td data-label="來源">{c.data_source}</td>
+                    <td data-label="稽查員">{c.inspector_username}</td>
+                    <td data-label="建立時間">{shortDateTime(c.created_at)}</td>
+                    <td className="cell-action">
+                      <button className="btn-secondary" onClick={() => setSelected(c)}>
+                        <Eye size={13} /> 檢視
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination
+            page={page} pageSize={pageSize} total={total} pageCount={pageCount}
+            onPage={setPage} onPageSize={setPageSize}
+          />
+        </>
       )}
 
       {selected && (

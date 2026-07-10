@@ -1233,6 +1233,67 @@ button:active {
   font-size: 12px;
 }
 
+/* ---------- Pagination ---------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+.pagination-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.pagination-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+.pagination-size select {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.pagination-info {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.pagination-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pagination-nav button {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.pagination-page {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-muted);
+  min-width: 48px;
+  text-align: center;
+}
+@media (max-width: 560px) {
+  .pagination {
+    justify-content: center;
+  }
+  .pagination-nav {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
 .empty-state {
   text-align: center;
   padding: 30px 10px;
