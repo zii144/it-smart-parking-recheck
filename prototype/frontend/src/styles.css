@@ -837,6 +837,7 @@ button:active {
   border-radius: var(--radius-pill);
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .pill-ok { background: var(--color-success-bg); color: var(--color-success); }
@@ -1021,7 +1022,7 @@ button:active {
 
 .case-table th {
   text-align: left;
-  padding: 12px 14px;
+  padding: 12px 12px;
   background: var(--color-bg);
   color: var(--color-muted);
   font-weight: 700;
@@ -1031,9 +1032,16 @@ button:active {
 
 .case-table td {
   text-align: left;
-  padding: 12px 14px;
+  padding: 12px 12px;
   border-top: 1px solid var(--color-line);
-  white-space: nowrap;
+  vertical-align: middle;
+  /* Let cells wrap at natural break points so the table fits its container
+     instead of forcing a bottom horizontal scrollbar (unreachable once there
+     are many rows). Not break-anywhere — that collapses columns and wraps
+     pills/ticket numbers mid-token even when there's room. keep-all stops CJK
+     text (地點) from breaking between every character. */
+  white-space: normal;
+  word-break: keep-all;
 }
 
 .case-table tbody tr:hover {

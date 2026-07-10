@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ListChecks, PlusCircle, Inbox, ImageIcon } from "lucide-react";
 import { api, BASE } from "../api";
 import Spinner from "./Spinner";
+import { shortDateTime } from "../format";
 
 const JUDGE_LABEL = {
   COMPLIANT: { text: "符合規定", cls: "pill-ok" },
@@ -100,7 +101,7 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
                       {c.data_source}
                       {c.manual_corrected ? " (已修正)" : ""}
                     </td>
-                    <td data-label="建立時間">{c.created_at}</td>
+                    <td data-label="建立時間">{shortDateTime(c.created_at)}</td>
                     <td data-label="照片">
                       {c.photo_path ? (
                         <a href={`${BASE}${c.photo_path}`} target="_blank" rel="noreferrer" className="btn-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: 0 }}>
