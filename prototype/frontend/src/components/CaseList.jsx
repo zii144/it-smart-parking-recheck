@@ -56,7 +56,8 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
           <p>尚無稽查案件，點選「新增稽查案件」開始。</p>
         </div>
       ) : (
-        <div className="table-scroll">
+        <>
+        <div className="table-scroll case-list-table">
           <table className="case-table">
             <thead>
               <tr>
@@ -117,6 +118,44 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
             </tbody>
           </table>
         </div>
+
+        <ul className="case-list-cards">
+          {cases.map((c) => {
+            const judge = JUDGE_LABEL[c.judgement] ?? { text: c.judgement, cls: "pill-neutral" };
+            const status = STATUS_LABEL[c.status] ?? { text: c.status, cls: "pill-neutral" };
+            return (
+              <li key={c.id} className="mcard">
+                <div className="mcard-top">
+                  <span className="mcard-title">{c.ticket_no}</span>
+                  <Pill cls={judge.cls}>{judge.text}</Pill>
+                </div>
+                <div className="mcard-loc">
+                  {c.district} {c.road} {c.spot_no}
+                </div>
+                <div className="mcard-meta">
+                  <Pill cls={status.cls}>{status.text}</Pill>
+                  <span className="mcard-tag">
+                    {c.data_source}
+                    {c.manual_corrected ? " · 已修正" : ""}
+                  </span>
+                  {!!c.review_required && <Pill cls="pill-warn">需複核</Pill>}
+                  {!!c.duplicate_warning && <Pill cls="pill-error">重複警示</Pill>}
+                </div>
+                <div className="mcard-foot">
+                  <span className="mcard-time">{shortDateTime(c.created_at)}</span>
+                  {c.photo_path ? (
+                    <a href={`${BASE}${c.photo_path}`} target="_blank" rel="noreferrer" className="btn-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: 0 }}>
+                      <ImageIcon size={13} /> 查看照片
+                    </a>
+                  ) : (
+                    <span className="mcard-time">無照片</span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        </>
       )}
     </div>
   );

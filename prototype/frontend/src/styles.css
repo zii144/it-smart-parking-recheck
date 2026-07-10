@@ -1156,6 +1156,83 @@ button:active {
   }
 }
 
+/* ---------- Purpose-built mobile case cards (inspector list) ----------
+   The generic table→row transform is fine on the admin's short tables, but the
+   inspector list has 9 columns, which stacks into a tall, form-like dump on a
+   phone. Render a compact, scannable card instead: ticket as the title, the
+   judgement/status as prominent pills, everything else condensed. */
+.case-list-cards {
+  display: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (max-width: 680px) {
+  .case-list-table {
+    display: none;
+  }
+  .case-list-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+  }
+}
+
+.mcard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mcard-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mcard-title {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  word-break: break-all;
+}
+.mcard-loc {
+  color: var(--color-muted);
+  font-size: 13px;
+  margin-top: -2px;
+}
+.mcard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.mcard-tag {
+  font-size: 12px;
+  color: var(--color-muted);
+  background: var(--color-bg);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+}
+.mcard-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--color-line);
+  padding-top: 9px;
+  margin-top: 2px;
+}
+.mcard-time {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
 .empty-state {
   text-align: center;
   padding: 30px 10px;
