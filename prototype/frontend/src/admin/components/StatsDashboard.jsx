@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import {
-  LayoutDashboard, Files, ClipboardList, Copy, Timer, TrendingUp, Map, Clock, Users, Gauge,
+  LayoutDashboard, Files, ClipboardList, Copy, Timer, TrendingUp, Map, Clock, Users, Gauge, Settings2,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, AreaChart, Area,
@@ -125,7 +125,9 @@ export default function StatsDashboard() {
           </Suspense>
         )}
         <p className="muted small" style={{ marginTop: 10 }}>
-          柱體高度與顏色代表各區域的案件密度（六角網格聚合）。可拖曳旋轉、傾斜與縮放；共 {mapPoints.length} 個定位點。
+          可拖曳旋轉、傾斜與縮放；點擊左上角
+          <Settings2 size={12} style={{ verticalAlign: "-2px", margin: "0 2px" }} />
+          設定鈕可切換視覺化模式、篩選判定類別並調整聚合參數。共 {mapPoints.length} 個定位點。
         </p>
       </div>
 
