@@ -3,6 +3,8 @@ import { ClipboardList, Inbox, Eye } from "lucide-react";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
 import CaseDetailPanel from "./CaseDetailPanel";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../usePagination";
 import { shortDateTime, statusLabel } from "../../format";
 
 const JUDGE_LABEL = {
@@ -16,6 +18,7 @@ export default function ReviewQueue({ adminUsername }) {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const { page, setPage, pageSize, setPageSize, pageItems, total, pageCount } = usePagination(cases);
 
   function load() {
     setLoading(true);
@@ -47,6 +50,7 @@ export default function ReviewQueue({ adminUsername }) {
           <p>目前沒有待複核案件。</p>
         </div>
       ) : (
+        <>
         <div className="table-scroll">
           <table className="case-table">
             <thead>
@@ -62,7 +66,7 @@ export default function ReviewQueue({ adminUsername }) {
               </tr>
             </thead>
             <tbody>
-              {cases.map((c) => {
+              {pageItems.map((c) => {
                 const judge = JUDGE_LABEL[c.judgement] ?? { text: c.judgement, cls: "pill-neutral" };
                 return (
                   <tr key={c.id}>
@@ -84,6 +88,11 @@ export default function ReviewQueue({ adminUsername }) {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page} pageSize={pageSize} total={total} pageCount={pageCount}
+          onPage={setPage} onPageSize={setPageSize}
+        />
+        </>
       )}
 
       {selected && (
