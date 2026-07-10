@@ -2,18 +2,13 @@ import { useEffect, useState } from "react";
 import { ListChecks, PlusCircle, Inbox, ImageIcon } from "lucide-react";
 import { api, BASE } from "../api";
 import Spinner from "./Spinner";
-import { shortDateTime } from "../format";
+import { shortDateTime, statusLabel } from "../format";
 
 const JUDGE_LABEL = {
   COMPLIANT: { text: "符合規定", cls: "pill-ok" },
   OVERDUE: { text: "開單逾時", cls: "pill-warn" },
   DATA_ERROR: { text: "資料異常", cls: "pill-error" },
   PARSE_ERROR: { text: "格式錯誤", cls: "pill-error" },
-};
-
-const STATUS_LABEL = {
-  CLOSED: { text: "CLOSED", cls: "pill-ok" },
-  REVIEW_REQUIRED: { text: "REVIEW_REQUIRED", cls: "pill-warn" },
 };
 
 function Pill({ cls, children }) {
@@ -75,7 +70,7 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
             <tbody>
               {cases.map((c) => {
                 const judge = JUDGE_LABEL[c.judgement] ?? { text: c.judgement, cls: "pill-neutral" };
-                const status = STATUS_LABEL[c.status] ?? { text: c.status, cls: "pill-neutral" };
+                const status = statusLabel(c.status);
                 return (
                   <tr key={c.id}>
                     <td data-label="帳單編號">{c.ticket_no}</td>
@@ -122,7 +117,7 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
         <ul className="case-list-cards">
           {cases.map((c) => {
             const judge = JUDGE_LABEL[c.judgement] ?? { text: c.judgement, cls: "pill-neutral" };
-            const status = STATUS_LABEL[c.status] ?? { text: c.status, cls: "pill-neutral" };
+            const status = statusLabel(c.status);
             return (
               <li key={c.id} className="mcard">
                 <div className="mcard-top">

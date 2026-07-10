@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
+import { STATUS_TEXT } from "../../format";
 
 // Mirrors the CSS custom properties in ../../styles.css. Hardcoded here
 // because SVG fill attributes are more reliably rendered with literal
@@ -83,7 +84,7 @@ export default function StatsDashboard() {
   }
 
   const judgementData = toChartData(stats.by_judgement, JUDGEMENT_LABELS, JUDGEMENT_COLORS, "#94a3b8");
-  const statusData = toChartData(stats.by_status, null, STATUS_COLORS, BAR_COLOR);
+  const statusData = toChartData(stats.by_status, STATUS_TEXT, STATUS_COLORS, BAR_COLOR);
   const sourceData = toChartData(stats.by_data_source, null, null, BAR_COLOR);
   const districtData = toChartData(stats.by_district, null, null, BAR_COLOR);
 

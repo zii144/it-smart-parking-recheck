@@ -4,6 +4,7 @@ import {
   HelpCircle, Loader2, Send, Pencil, Trash2, Save,
 } from "lucide-react";
 import { adminApi, BASE } from "../../api";
+import { statusLabel } from "../../format";
 
 const JUDGE_LABEL = {
   COMPLIANT: { text: "符合規定", cls: "pill-ok" },
@@ -123,7 +124,7 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
 
         <div className="badge-row">
           <span className={`pill ${judge.cls}`}>{judge.text}</span>
-          <span className="pill pill-neutral">{caseData.status}</span>
+          <span className={`pill ${statusLabel(caseData.status).cls}`}>{statusLabel(caseData.status).text}</span>
           {!!caseData.duplicate_warning && <span className="pill pill-error">重複警示</span>}
           {!!caseData.manual_corrected && <span className="pill pill-warn">稽查員已修正</span>}
         </div>
