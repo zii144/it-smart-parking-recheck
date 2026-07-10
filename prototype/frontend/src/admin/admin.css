@@ -111,6 +111,45 @@
 
 /* ---------- Chart breakdowns ---------- */
 
+.chart-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--color-muted);
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+/* Full-width sections (3D map, trend) that stand above the 2-column grid. */
+.chart-card.full {
+  margin-bottom: 16px;
+}
+
+.map3d-wrap {
+  position: relative;
+}
+.map3d {
+  height: 460px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #0e1013;
+}
+.map3d canvas {
+  border-radius: var(--radius-md);
+  outline: none;
+}
+.map3d-note {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background: rgba(18, 20, 24, 0.82);
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

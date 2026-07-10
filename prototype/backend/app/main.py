@@ -765,12 +765,74 @@ def admin_stats(
     judged_total = sum(by_judgement.values())
     overdue_rate = round(overdue / judged_total * 100, 1) if judged_total else 0.0
 
+    # Cases per calendar day (created_at) for the trend chart.
+    by_day = [
+        {"date": d, "count": c}
+        for d, c in db.execute(
+            select(func.substr(Case.created_at, 1, 10), func.count())
+            .group_by(func.substr(Case.created_at, 1, 10))
+            .order_by(func.substr(Case.created_at, 1, 10))
+        ).all()
+    ]
+
+    # Ticket-issue hour distribution (0–23), from the parsed issue time.
+    hour_counts = {
+        int(h): c
+        for h, c in db.execute(
+            select(func.substr(Case.issue_datetime, 12, 2), func.count())
+            .where(Case.issue_datetime.is_not(None))
+            .group_by(func.substr(Case.issue_datetime, 12, 2))
+        ).all()
+        if h and str(h).isdigit()
+    }
+    by_hour = [{"hour": h, "count": hour_counts.get(h, 0)} for h in range(24)]
+
+    by_inspector = {
+        (u or "未知"): c
+        for u, c in db.execute(
+            select(Case.inspector_username, func.count()).group_by(Case.inspector_username)
+        ).all()
+    }
+
+    # Time-difference histogram (minutes) — how far each ticket was from the
+    # 60-minute threshold.
+    diffs = db.scalars(
+        select(Case.time_diff_minutes).where(Case.time_diff_minutes.is_not(None))
+    ).all()
+    hist_bins = [
+        ("資料異常(<0)", lambda x: x < 0),
+        ("0–30", lambda x: 0 <= x < 30),
+        ("30–60", lambda x: 30 <= x < 60),
+        ("60–90", lambda x: 60 <= x < 90),
+        ("90–120", lambda x: 90 <= x < 120),
+        ("120+", lambda x: x >= 120),
+    ]
+    time_diff_histogram = [
+        {"bucket": label, "count": sum(1 for x in diffs if pred(x))}
+        for label, pred in hist_bins
+    ]
+
+    # GPS points for the 3D map (capped to keep the payload reasonable).
+    map_points = [
+        {"lat": lat, "lng": lng, "judgement": j or "UNKNOWN", "district": d or "未知"}
+        for lat, lng, j, d in db.execute(
+            select(Case.gps_lat, Case.gps_lng, Case.judgement, Case.district)
+            .where(Case.gps_lat.is_not(None), Case.gps_lng.is_not(None))
+            .limit(2000)
+        ).all()
+    ]
+
     return {
         "total": total,
         "by_judgement": by_judgement,
         "by_status": by_status,
         "by_data_source": by_data_source,
         "by_district": by_district,
+        "by_day": by_day,
+        "by_hour": by_hour,
+        "by_inspector": by_inspector,
+        "time_diff_histogram": time_diff_histogram,
+        "map_points": map_points,
         "duplicate_count": duplicate_count,
         "review_pending": review_pending,
         "avg_time_diff_minutes": avg_time_diff,

@@ -16,8 +16,26 @@ def test_stats_shape(client, manager_token):
     res = client.get("/api/admin/stats", headers=auth(manager_token))
     assert res.status_code == 200
     body = res.json()
-    for key in ("total", "by_judgement", "by_status", "review_pending", "overdue_rate_pct"):
+    for key in (
+        "total", "by_judgement", "by_status", "review_pending", "overdue_rate_pct",
+        "by_day", "by_hour", "by_inspector", "time_diff_histogram", "map_points",
+    ):
         assert key in body
+    assert len(body["by_hour"]) == 24
+    assert len(body["time_diff_histogram"]) == 6
+
+
+def test_stats_map_points_from_gps(client, inspector_token, manager_token):
+    client.post("/api/cases", headers=auth(inspector_token), json={
+        "ticket_no": "Q7036002A121045", "district": "大安區", "road": "敦化南路", "spot_no": "C-1",
+        "plate_no": "MAP-1", "amount": 900, "due_date": "2026-07-24",
+        "parking_date": "2026-07-03", "parking_start": "2026-07-03T11:40:00",
+        "parking_end": "2026-07-03T12:40:00", "data_source": "AUTO_QR",
+        "gps_lat": 25.041, "gps_lng": 121.565, "inspector_username": "insp01",
+    })
+    body = client.get("/api/admin/stats", headers=auth(manager_token)).json()
+    pts = [p for p in body["map_points"] if p["lat"] == 25.041 and p["lng"] == 121.565]
+    assert pts and pts[0]["district"] == "大安區"
 
 
 def test_csv_export_has_header_and_seeded_case(client, manager_token):
