@@ -242,7 +242,7 @@ export default function InspectorApp() {
         />
       )}
 
-      <main className="app-main">
+      <main className={`app-main${step === "list" ? " app-main-wide" : ""}`}>
         <StepBadge state={STEP_STATE_LABEL[step]} />
         <StepProgress step={step} />
 
