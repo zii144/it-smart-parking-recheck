@@ -778,14 +778,54 @@ def admin_stats(
     }
 
 
-CSV_COLUMNS = [
-    "id", "ticket_no", "district", "road", "spot_no", "gps_lat", "gps_lng",
-    "plate_no", "amount", "due_date",
-    "parking_date", "parking_start", "parking_end", "data_source", "manual_corrected",
-    "inspector_username", "issue_datetime", "time_diff_minutes", "judgement",
-    "review_required", "duplicate_warning", "status", "review_outcome", "review_note",
-    "reviewed_by", "reviewed_at", "synced_offline", "created_at",
+# CSV export columns, matching the field team's spreadsheet layout. Two header
+# rows: column names, then the per-column notes from the source sheet.
+CSV_HEADER_NAMES = [
+    "日期", "檢查時間", "調查員", "路段", "停車格編號", "車號",
+    "日期", "調查員", "時間", "秒", "可不用", "費率", "其他",
 ]
+CSV_HEADER_NOTES = [
+    "稽查當下日期", "稽查當下時間", "我們的稽查員姓名", "", "", "",
+    "條碼下方數字(如 Q7078422D094411)", "", "", "",
+    "保留欄位，人工填寫", "", "保留欄位，人工填寫",
+]
+
+
+def _split_ticket_no(ticket_no: str):
+    """Split a ticket number into the sheet's barcode columns:
+    (日期 = Q+月+日, 調查員 = 開單員編號, 時間 = HHMM, 秒 = SS).
+    Unparseable numbers keep the raw value in the date column so nothing is lost.
+    """
+    try:
+        p = rules.parse_ticket_no(ticket_no or "")
+    except rules.TicketParseError:
+        return (ticket_no or "", "", "", "")
+    return (
+        f"Q{p.month}{p.day:02d}",
+        p.inspector_code,
+        f"{p.hour:02d}{p.minute:02d}",
+        f"{p.second:02d}",
+    )
+
+
+def _inspection_date(created_at: str) -> str:
+    if not created_at:
+        return ""
+    try:
+        dt = datetime.fromisoformat(created_at)
+    except ValueError:
+        return created_at[:10]
+    return f"{dt.month}月{dt.day}日"
+
+
+def _inspection_time(created_at: str) -> str:
+    if not created_at:
+        return ""
+    try:
+        dt = datetime.fromisoformat(created_at)
+    except ValueError:
+        return ""
+    return f"{dt.hour:02d}:{dt.minute:02d}"
 
 
 @app.get("/api/admin/export.csv")
@@ -794,17 +834,34 @@ def admin_export_csv(
     principal: Principal = Depends(require_manager),
 ):
     rows = db.scalars(select(Case).order_by(Case.id)).all()
+    name_by_username = {
+        i.username: i.display_name for i in db.scalars(select(Inspector)).all()
+    }
 
     buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, extrasaction="ignore")
-    writer.writeheader()
-    for r in rows:
-        writer.writerow(row_to_dict(r))
+    writer = csv.writer(buf)
+    writer.writerow(CSV_HEADER_NAMES)
+    writer.writerow(CSV_HEADER_NOTES)
+    for c in rows:
+        g, h, i, j = _split_ticket_no(c.ticket_no)
+        writer.writerow([
+            _inspection_date(c.created_at),                          # A 日期
+            _inspection_time(c.created_at),                          # B 檢查時間
+            name_by_username.get(c.inspector_username, c.inspector_username),  # C 調查員
+            c.road or "",                                            # D 路段
+            c.spot_no or "",                                         # E 停車格編號
+            c.plate_no or "",                                        # F 車號
+            g, h, i, j,                                              # G-J 條碼下方數字
+            "",                                                      # K 可不用 (保留)
+            "",                                                      # L 費率 (未蒐集)
+            "",                                                      # M 其他 (保留)
+        ])
     buf.seek(0)
 
+    # Prepend a UTF-8 BOM so Excel opens the Chinese headers correctly.
     return StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv",
+        iter(["﻿" + buf.getvalue()]),
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=parking_cases_export.csv"},
     )
 

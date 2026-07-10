@@ -25,8 +25,11 @@ def test_csv_export_has_header_and_seeded_case(client, manager_token):
     assert res.status_code == 200
     assert res.headers["content-type"].startswith("text/csv")
     text = res.text
-    assert text.splitlines()[0].startswith("id,ticket_no,")
-    assert "Q7028435D095253" in text  # the pre-seeded case
+    # New spreadsheet layout: first header row is the column names.
+    first = text.lstrip("﻿").splitlines()[0]
+    assert first.startswith("日期,檢查時間,調查員,")
+    # The pre-seeded case (Q7028435D095253) appears split into barcode columns.
+    assert "8435D" in text
 
 
 def test_create_inspector_hides_password_and_can_login(client, sysadmin_token):
