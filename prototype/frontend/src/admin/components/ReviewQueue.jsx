@@ -65,14 +65,14 @@ export default function ReviewQueue({ adminUsername }) {
                 const judge = JUDGE_LABEL[c.judgement] ?? { text: c.judgement, cls: "pill-neutral" };
                 return (
                   <tr key={c.id}>
-                    <td>{c.ticket_no}</td>
-                    <td>{c.district} {c.road} {c.spot_no}</td>
-                    <td><span className={`pill ${judge.cls}`}>{judge.text}</span></td>
-                    <td><span className="pill pill-warn">{c.status}</span></td>
-                    <td>{c.duplicate_warning ? <span className="pill pill-error">是</span> : "—"}</td>
-                    <td>{c.inspector_username}</td>
-                    <td>{c.created_at}</td>
-                    <td>
+                    <td data-label="帳單編號">{c.ticket_no}</td>
+                    <td data-label="地點">{c.district} {c.road} {c.spot_no}</td>
+                    <td data-label="判定"><span className={`pill ${judge.cls}`}>{judge.text}</span></td>
+                    <td data-label="狀態"><span className="pill pill-warn">{c.status}</span></td>
+                    <td data-label="重複">{c.duplicate_warning ? <span className="pill pill-error">是</span> : "—"}</td>
+                    <td data-label="稽查員">{c.inspector_username}</td>
+                    <td data-label="建立時間">{c.created_at}</td>
+                    <td className="cell-action">
                       <button className="btn-secondary" onClick={() => setSelected(c)}>
                         <Eye size={13} /> 複核
                       </button>

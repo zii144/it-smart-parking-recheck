@@ -76,32 +76,32 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
                 const status = STATUS_LABEL[c.status] ?? { text: c.status, cls: "pill-neutral" };
                 return (
                   <tr key={c.id}>
-                    <td>{c.ticket_no}</td>
-                    <td>
+                    <td data-label="帳單編號">{c.ticket_no}</td>
+                    <td data-label="地點">
                       {c.district} {c.road} {c.spot_no}
                     </td>
-                    <td>
+                    <td data-label="判定">
                       <Pill cls={judge.cls}>{judge.text}</Pill>
                     </td>
-                    <td>
+                    <td data-label="需複核">
                       <Pill cls={c.review_required ? "pill-warn" : "pill-neutral"}>
                         {c.review_required ? "是" : "否"}
                       </Pill>
                     </td>
-                    <td>
+                    <td data-label="重複">
                       <Pill cls={c.duplicate_warning ? "pill-error" : "pill-neutral"}>
                         {c.duplicate_warning ? "是" : "否"}
                       </Pill>
                     </td>
-                    <td>
+                    <td data-label="狀態">
                       <Pill cls={status.cls}>{status.text}</Pill>
                     </td>
-                    <td>
+                    <td data-label="來源">
                       {c.data_source}
                       {c.manual_corrected ? " (已修正)" : ""}
                     </td>
-                    <td>{c.created_at}</td>
-                    <td>
+                    <td data-label="建立時間">{c.created_at}</td>
+                    <td data-label="照片">
                       {c.photo_path ? (
                         <a href={`${BASE}${c.photo_path}`} target="_blank" rel="noreferrer" className="btn-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: 0 }}>
                           <ImageIcon size={13} /> 查看

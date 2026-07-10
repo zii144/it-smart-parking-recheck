@@ -1,28 +1,32 @@
 :root {
-  --color-primary: #2f6feb;
-  --color-primary-dark: #1f56c7;
-  --color-primary-light: #eaf1ff;
-  --color-ink: #0f1720;
-  --color-muted: #64748b;
-  --color-border: #e2e6ed;
+  /* Gold accent + warm neutral palette (Crypt-inspired redesign). */
+  --color-primary: #e6a020;
+  --color-primary-dark: #c9861a;
+  --color-primary-light: #fbeecd;
+  --color-ink: #1b1d21;
+  --color-muted: #8b8f98;
+  --color-border: #ece7de;
+  --color-line: #f0ece4;
   --color-surface: #ffffff;
-  --color-bg: #f3f5f9;
+  --color-bg: #f5f2ec;
+  --color-panel: #1c1e22;      /* dark stat/hero panel */
+  --color-panel-soft: #26282d;
 
-  --color-success: #16a34a;
-  --color-success-bg: #e9f9ef;
-  --color-warning: #b45309;
-  --color-warning-bg: #fff3e0;
-  --color-danger: #c02b3a;
-  --color-danger-bg: #fdeced;
+  --color-success: #159a63;
+  --color-success-bg: #e4f5ec;
+  --color-warning: #c9861a;
+  --color-warning-bg: #fbeecd;
+  --color-danger: #e0483f;
+  --color-danger-bg: #fcebe9;
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
   --radius-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 32, 0.06);
-  --shadow-md: 0 6px 20px rgba(15, 23, 32, 0.08);
-  --shadow-lg: 0 12px 32px rgba(15, 23, 32, 0.14);
+  --shadow-sm: 0 1px 2px rgba(28, 30, 34, 0.05);
+  --shadow-md: 0 10px 28px rgba(28, 30, 34, 0.06);
+  --shadow-lg: 0 20px 44px rgba(28, 30, 34, 0.12);
 
   --space-4: 16px;
   --space-5: 24px;
@@ -38,7 +42,10 @@ body {
   margin: 0;
   font-family: -apple-system, "Inter", "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
   background: var(--color-bg);
-  background-image: radial-gradient(circle at 10% -10%, #eaf1ff 0%, transparent 45%);
+  background-image:
+    radial-gradient(circle at 100% -5%, rgba(230, 160, 32, 0.10) 0%, transparent 38%),
+    radial-gradient(circle at 0% 105%, rgba(230, 160, 32, 0.06) 0%, transparent 40%);
+  background-attachment: fixed;
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
 }
@@ -62,37 +69,40 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 14px 20px;
-  background: linear-gradient(135deg, #16223a, #1f2f4d);
-  color: white;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(1.4) blur(12px);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  color: var(--color-ink);
+  border-bottom: 1px solid var(--color-line);
   position: sticky;
   top: 0;
   z-index: 20;
-  box-shadow: var(--shadow-md);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 
 .brand .brand-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.14);
-  color: #9dc0ff;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--color-primary), #f0b84a);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(230, 160, 32, 0.32);
 }
 
 .brand .inspector-name {
-  font-weight: 400;
-  opacity: 0.75;
+  font-weight: 500;
+  color: var(--color-muted);
   font-size: 13px;
 }
 
@@ -109,21 +119,22 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 13px;
-  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  color: var(--color-ink);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .header-actions .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
   text-decoration: none;
 }
 
@@ -143,10 +154,10 @@ body {
 
 .card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
   padding: 24px 26px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   margin-bottom: 18px;
   animation: rise-in 0.25s ease;
 }
@@ -418,13 +429,13 @@ button {
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   border: none;
-  padding: 11px 18px;
+  padding: 12px 20px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: transform 0.05s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.05s ease, background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   white-space: nowrap;
 }
 
@@ -434,33 +445,36 @@ button:active {
 
 .btn-primary {
   background: var(--color-primary);
-  color: white;
-  box-shadow: var(--shadow-sm);
+  color: #231a06;
+  box-shadow: 0 8px 18px rgba(230, 160, 32, 0.30);
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--color-primary-dark);
+  box-shadow: 0 10px 22px rgba(230, 160, 32, 0.38);
 }
 
 .btn-primary:disabled {
-  background: #b7c9ef;
+  background: #ede3cf;
+  color: #b3a488;
   cursor: not-allowed;
   box-shadow: none;
 }
 
 .btn-secondary {
-  background: var(--color-bg);
+  background: var(--color-surface);
   color: var(--color-ink);
   border: 1px solid var(--color-border);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #e9ecf2;
+  background: var(--color-bg);
+  border-color: #ddd6c9;
 }
 
 .btn-link {
   background: none;
-  color: var(--color-primary);
+  color: var(--color-primary-dark);
   padding: 4px 8px;
   font-weight: 600;
 }
@@ -991,9 +1005,9 @@ button:active {
 
 .table-scroll {
   overflow-x: auto;
-  margin-top: 10px;
+  margin-top: 12px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-line);
 }
 
 .case-table {
@@ -1004,22 +1018,96 @@ button:active {
 
 .case-table th {
   text-align: left;
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: var(--color-bg);
   color: var(--color-muted);
   font-weight: 700;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
 .case-table td {
   text-align: left;
-  padding: 10px 12px;
-  border-top: 1px solid var(--color-border);
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-line);
   white-space: nowrap;
 }
 
 .case-table tbody tr:hover {
   background: var(--color-bg);
+}
+
+/* ---------- Responsive data tables ----------
+   On narrow screens a horizontal-scrolling table is unreadable, so each row
+   becomes a self-contained card and every cell shows its column name (from a
+   data-label attribute). thead is kept for screen readers but hidden. */
+@media (max-width: 680px) {
+  .table-scroll {
+    overflow-x: visible;
+    border: none;
+    border-radius: 0;
+  }
+  .case-table,
+  .case-table tbody,
+  .case-table tr,
+  .case-table td {
+    display: block;
+    width: 100%;
+  }
+  .case-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .case-table tr {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 4px 2px;
+    margin-bottom: 12px;
+  }
+  .case-table tbody tr:hover {
+    background: var(--color-surface);
+  }
+  .case-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    text-align: right;
+    white-space: normal;
+    border-top: none;
+    padding: 9px 14px;
+  }
+  .case-table td + td {
+    border-top: 1px solid var(--color-line);
+  }
+  .case-table td::before {
+    content: attr(data-label);
+    flex: 0 0 38%;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+  /* Action cell (a button) spans the full width with no label. */
+  .case-table td.cell-action {
+    padding: 12px 14px 6px;
+  }
+  .case-table td.cell-action::before {
+    content: none;
+  }
+  .case-table td.cell-action .btn-secondary,
+  .case-table td.cell-action .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .empty-state {
