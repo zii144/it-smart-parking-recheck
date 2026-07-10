@@ -47,6 +47,27 @@ SEED_LOCATIONS = [
             {"road": "和平東路", "spots": ["D-055"]},
         ],
     },
+    # Districts/roads seen on the real sample tickets (target-sample/), so the
+    # GPS district suggestion and road picklists line up with real fieldwork.
+    {
+        "district": "內湖區",
+        "roads": [
+            {"road": "成功路5段450巷22弄", "spots": ["0020", "0021"]},
+        ],
+    },
+    {
+        "district": "南港區",
+        "roads": [
+            {"road": "經園街(機車)", "spots": ["0000"]},
+            {"road": "舊莊街1段", "spots": ["30", "31"]},
+        ],
+    },
+    {
+        "district": "松山區",
+        "roads": [
+            {"road": "民生東路4段80巷", "spots": ["05", "06"]},
+        ],
+    },
 ]
 
 # --- Default system parameters (editable from the admin "系統設定" tab) -----

@@ -179,6 +179,20 @@ class ReviewRequest(BaseModel):
     reviewed_by: str
 
 
+class AdminCaseUpdateRequest(BaseModel):
+    # All optional — only the provided fields are updated (PATCH semantics).
+    ticket_no: Optional[str] = None
+    plate_no: Optional[str] = None
+    amount: Optional[float] = None
+    due_date: Optional[str] = None
+    parking_date: Optional[str] = None
+    parking_start: Optional[str] = None
+    parking_end: Optional[str] = None
+    district: Optional[str] = None
+    road: Optional[str] = None
+    spot_no: Optional[str] = None
+
+
 class InspectorCreateRequest(BaseModel):
     username: str
     password: str
@@ -434,7 +448,7 @@ def create_case(
 
     review_required = bool(
         judgement_value in ("OVERDUE", "DATA_ERROR", "PARSE_ERROR")
-        or payload.data_source in ("MANUAL_FROM_QR_PAGE", "MANUAL_FROM_TICKET")
+        or payload.data_source in ("MANUAL_FROM_QR_PAGE", "MANUAL_FROM_TICKET", "OCR")
         or payload.manual_corrected
         or duplicate_warning
     )
@@ -544,6 +558,8 @@ def admin_list_cases(
     duplicate_warning: Optional[bool] = None,
     review_required: Optional[bool] = None,
     district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,  # YYYY-MM-DD, matches created_at day
     q: Optional[str] = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_manager),
@@ -562,6 +578,12 @@ def admin_list_cases(
         stmt = stmt.where(Case.review_required == int(review_required))
     if district:
         stmt = stmt.where(Case.district == district)
+    if inspector:
+        stmt = stmt.where(Case.inspector_username == inspector)
+    if date:
+        # created_at is stored as an ISO string ("2026-07-02T10:20:00"), so a
+        # day filter is a prefix match.
+        stmt = stmt.where(Case.created_at.like(f"{date}%"))
     if q:
         like = f"%{q}%"
         stmt = stmt.where(or_(Case.ticket_no.like(like), Case.plate_no.like(like)))
@@ -616,6 +638,88 @@ def admin_review_case(
     return row_to_dict(case)
 
 
+# Fields an admin (管理人員) may edit on a case. Derived fields (judgement,
+# issue time, duplicate flag) are recomputed from these, never edited directly.
+_EDITABLE_CASE_FIELDS = (
+    "ticket_no", "plate_no", "amount", "due_date",
+    "parking_date", "parking_start", "parking_end",
+    "district", "road", "spot_no",
+)
+
+
+@app.patch("/api/admin/cases/{case_id}")
+def admin_update_case(
+    case_id: int,
+    payload: AdminCaseUpdateRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_manager),
+):
+    case = db.get(Case, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="案件不存在")
+
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=400, detail="沒有要更新的欄位")
+
+    # A ticket number must stay unique across other cases.
+    if "ticket_no" in data and data["ticket_no"] != case.ticket_no:
+        clash = db.scalar(
+            select(Case).where(Case.ticket_no == data["ticket_no"], Case.id != case_id)
+        )
+        if clash is not None:
+            raise HTTPException(status_code=409, detail="帳單編號已存在於其他案件")
+
+    for field in _EDITABLE_CASE_FIELDS:
+        if field in data:
+            setattr(case, field, data[field])
+
+    # Re-run the authoritative judgement when a field it depends on changed, so
+    # the stored judgement / issue time / time diff never drift from the data.
+    if any(f in data for f in ("ticket_no", "parking_date", "parking_start")):
+        judgement, error = _run_judgement(db, case.ticket_no, case.parking_date, case.parking_start)
+        if error:
+            case.judgement = "PARSE_ERROR"
+            case.issue_datetime = None
+            case.time_diff_minutes = None
+        else:
+            case.judgement = judgement["judgement"]
+            case.issue_datetime = judgement["issue_datetime"]
+            case.time_diff_minutes = judgement["time_diff_minutes"]
+
+    # Keep the duplicate flag consistent with the (possibly new) ticket number.
+    case.duplicate_warning = int(
+        db.scalar(select(Case).where(Case.ticket_no == case.ticket_no, Case.id != case_id))
+        is not None
+    )
+
+    db.commit()
+    db.refresh(case)
+    return row_to_dict(case)
+
+
+@app.delete("/api/admin/cases/{case_id}")
+def admin_delete_case(
+    case_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_manager),
+):
+    case = db.get(Case, case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="案件不存在")
+
+    # Best-effort cleanup of the stored photo file (ignore if already gone).
+    if case.photo_path:
+        try:
+            (UPLOADS_DIR / case.photo_path.rsplit("/", 1)[-1]).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    db.delete(case)
+    db.commit()
+    return {"ok": True, "deleted_id": case_id}
+
+
 @app.get("/api/admin/stats")
 def admin_stats(
     db: Session = Depends(get_db),
@@ -661,12 +765,74 @@ def admin_stats(
     judged_total = sum(by_judgement.values())
     overdue_rate = round(overdue / judged_total * 100, 1) if judged_total else 0.0
 
+    # Cases per calendar day (created_at) for the trend chart.
+    by_day = [
+        {"date": d, "count": c}
+        for d, c in db.execute(
+            select(func.substr(Case.created_at, 1, 10), func.count())
+            .group_by(func.substr(Case.created_at, 1, 10))
+            .order_by(func.substr(Case.created_at, 1, 10))
+        ).all()
+    ]
+
+    # Ticket-issue hour distribution (0–23), from the parsed issue time.
+    hour_counts = {
+        int(h): c
+        for h, c in db.execute(
+            select(func.substr(Case.issue_datetime, 12, 2), func.count())
+            .where(Case.issue_datetime.is_not(None))
+            .group_by(func.substr(Case.issue_datetime, 12, 2))
+        ).all()
+        if h and str(h).isdigit()
+    }
+    by_hour = [{"hour": h, "count": hour_counts.get(h, 0)} for h in range(24)]
+
+    by_inspector = {
+        (u or "未知"): c
+        for u, c in db.execute(
+            select(Case.inspector_username, func.count()).group_by(Case.inspector_username)
+        ).all()
+    }
+
+    # Time-difference histogram (minutes) — how far each ticket was from the
+    # 60-minute threshold.
+    diffs = db.scalars(
+        select(Case.time_diff_minutes).where(Case.time_diff_minutes.is_not(None))
+    ).all()
+    hist_bins = [
+        ("資料異常(<0)", lambda x: x < 0),
+        ("0–30", lambda x: 0 <= x < 30),
+        ("30–60", lambda x: 30 <= x < 60),
+        ("60–90", lambda x: 60 <= x < 90),
+        ("90–120", lambda x: 90 <= x < 120),
+        ("120+", lambda x: x >= 120),
+    ]
+    time_diff_histogram = [
+        {"bucket": label, "count": sum(1 for x in diffs if pred(x))}
+        for label, pred in hist_bins
+    ]
+
+    # GPS points for the 3D map (capped to keep the payload reasonable).
+    map_points = [
+        {"lat": lat, "lng": lng, "judgement": j or "UNKNOWN", "district": d or "未知"}
+        for lat, lng, j, d in db.execute(
+            select(Case.gps_lat, Case.gps_lng, Case.judgement, Case.district)
+            .where(Case.gps_lat.is_not(None), Case.gps_lng.is_not(None))
+            .limit(2000)
+        ).all()
+    ]
+
     return {
         "total": total,
         "by_judgement": by_judgement,
         "by_status": by_status,
         "by_data_source": by_data_source,
         "by_district": by_district,
+        "by_day": by_day,
+        "by_hour": by_hour,
+        "by_inspector": by_inspector,
+        "time_diff_histogram": time_diff_histogram,
+        "map_points": map_points,
         "duplicate_count": duplicate_count,
         "review_pending": review_pending,
         "avg_time_diff_minutes": avg_time_diff,
@@ -674,14 +840,54 @@ def admin_stats(
     }
 
 
-CSV_COLUMNS = [
-    "id", "ticket_no", "district", "road", "spot_no", "gps_lat", "gps_lng",
-    "plate_no", "amount", "due_date",
-    "parking_date", "parking_start", "parking_end", "data_source", "manual_corrected",
-    "inspector_username", "issue_datetime", "time_diff_minutes", "judgement",
-    "review_required", "duplicate_warning", "status", "review_outcome", "review_note",
-    "reviewed_by", "reviewed_at", "synced_offline", "created_at",
+# CSV export columns, matching the field team's spreadsheet layout. Two header
+# rows: column names, then the per-column notes from the source sheet.
+CSV_HEADER_NAMES = [
+    "日期", "檢查時間", "調查員", "路段", "停車格編號", "車號",
+    "日期", "調查員", "時間", "秒", "可不用", "費率", "其他",
 ]
+CSV_HEADER_NOTES = [
+    "稽查當下日期", "稽查當下時間", "我們的稽查員姓名", "", "", "",
+    "條碼下方數字(如 Q7078422D094411)", "", "", "",
+    "保留欄位，人工填寫", "", "保留欄位，人工填寫",
+]
+
+
+def _split_ticket_no(ticket_no: str):
+    """Split a ticket number into the sheet's barcode columns:
+    (日期 = Q+月+日, 調查員 = 開單員編號, 時間 = HHMM, 秒 = SS).
+    Unparseable numbers keep the raw value in the date column so nothing is lost.
+    """
+    try:
+        p = rules.parse_ticket_no(ticket_no or "")
+    except rules.TicketParseError:
+        return (ticket_no or "", "", "", "")
+    return (
+        f"Q{p.month}{p.day:02d}",
+        p.inspector_code,
+        f"{p.hour:02d}{p.minute:02d}",
+        f"{p.second:02d}",
+    )
+
+
+def _inspection_date(created_at: str) -> str:
+    if not created_at:
+        return ""
+    try:
+        dt = datetime.fromisoformat(created_at)
+    except ValueError:
+        return created_at[:10]
+    return f"{dt.month}月{dt.day}日"
+
+
+def _inspection_time(created_at: str) -> str:
+    if not created_at:
+        return ""
+    try:
+        dt = datetime.fromisoformat(created_at)
+    except ValueError:
+        return ""
+    return f"{dt.hour:02d}:{dt.minute:02d}"
 
 
 @app.get("/api/admin/export.csv")
@@ -690,17 +896,34 @@ def admin_export_csv(
     principal: Principal = Depends(require_manager),
 ):
     rows = db.scalars(select(Case).order_by(Case.id)).all()
+    name_by_username = {
+        i.username: i.display_name for i in db.scalars(select(Inspector)).all()
+    }
 
     buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, extrasaction="ignore")
-    writer.writeheader()
-    for r in rows:
-        writer.writerow(row_to_dict(r))
+    writer = csv.writer(buf)
+    writer.writerow(CSV_HEADER_NAMES)
+    writer.writerow(CSV_HEADER_NOTES)
+    for c in rows:
+        g, h, i, j = _split_ticket_no(c.ticket_no)
+        writer.writerow([
+            _inspection_date(c.created_at),                          # A 日期
+            _inspection_time(c.created_at),                          # B 檢查時間
+            name_by_username.get(c.inspector_username, c.inspector_username),  # C 調查員
+            c.road or "",                                            # D 路段
+            c.spot_no or "",                                         # E 停車格編號
+            c.plate_no or "",                                        # F 車號
+            g, h, i, j,                                              # G-J 條碼下方數字
+            "",                                                      # K 可不用 (保留)
+            "",                                                      # L 費率 (未蒐集)
+            "",                                                      # M 其他 (保留)
+        ])
     buf.seek(0)
 
+    # Prepend a UTF-8 BOM so Excel opens the Chinese headers correctly.
     return StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv",
+        iter(["﻿" + buf.getvalue()]),
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=parking_cases_export.csv"},
     )
 

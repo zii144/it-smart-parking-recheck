@@ -7,7 +7,7 @@ import { loadQueue, enqueue, removeFromQueue } from "./offlineQueue";
 import Login from "./components/Login";
 import PermissionCheck from "./components/PermissionCheck";
 import LocationSelect from "./components/LocationSelect";
-import QRScan from "./components/QRScan";
+import AcquireStep from "./components/AcquireStep";
 import ConfirmForm from "./components/ConfirmForm";
 import JudgmentBanner from "./components/JudgmentBanner";
 import PhotoCapture from "./components/PhotoCapture";
@@ -16,17 +16,18 @@ import OfflineBar from "./components/OfflineBar";
 import CaseList from "./components/CaseList";
 import StepBadge from "./components/StepBadge";
 import StepProgress from "./components/StepProgress";
+import { sourceLabel } from "./format";
 
 const STEP_STATE_LABEL = {
-  permission: "CHECKING_PERMISSION",
-  list: "READY",
-  location: "LOCATION_SELECTED",
-  qr: "QR_SCANNING",
-  confirm: "CONFIRMING",
-  judgment: "CALCULATING",
-  photo: "PHOTO_CAPTURED",
-  save: "READY_TO_SAVE",
-  done: "CLOSED / REVIEW_REQUIRED",
+  permission: "檢查權限中",
+  list: "待命中",
+  location: "已選擇地點",
+  qr: "取得停車單資料中",
+  confirm: "確認資料中",
+  judgment: "計算開單時效中",
+  photo: "已拍照存證",
+  save: "準備儲存",
+  done: "已結案／待複核",
 };
 
 const emptyDraft = () => ({
@@ -191,7 +192,7 @@ export default function InspectorApp() {
   function startNewCase() {
     setDraft(emptyDraft());
     setSaveMessage(null);
-    setStep("location");
+    setStep("qr");
   }
 
   if (step === "login") {
@@ -242,7 +243,7 @@ export default function InspectorApp() {
         />
       )}
 
-      <main className="app-main">
+      <main className={`app-main${step === "list" ? " app-main-wide" : ""}`}>
         <StepBadge state={STEP_STATE_LABEL[step]} />
         <StepProgress step={step} />
 
@@ -254,23 +255,24 @@ export default function InspectorApp() {
           <CaseList inspector={inspector} refreshKey={refreshKey} onNewCase={startNewCase} />
         )}
 
-        {step === "location" && (
-          <LocationSelect
-            onSelected={(loc) => {
-              setDraft((d) => ({ ...d, ...loc }));
-              setStep("qr");
+        {step === "qr" && (
+          <AcquireStep
+            onResult={(res) => {
+              setDraft((d) => ({ ...d, scanResult: res }));
+              setStep("location");
+            }}
+            onManualFallback={() => {
+              setDraft((d) => ({ ...d, scanResult: { status: "scan_failed", dataSource: "MANUAL_FROM_TICKET" } }));
+              setStep("location");
             }}
           />
         )}
 
-        {step === "qr" && (
-          <QRScan
-            onResult={(res) => {
-              setDraft((d) => ({ ...d, scanResult: res }));
-              setStep("confirm");
-            }}
-            onManualFallback={() => {
-              setDraft((d) => ({ ...d, scanResult: { status: "scan_failed", dataSource: "MANUAL_FROM_TICKET" } }));
+        {step === "location" && (
+          <LocationSelect
+            onBack={() => setStep("qr")}
+            onSelected={(loc) => {
+              setDraft((d) => ({ ...d, ...loc }));
               setStep("confirm");
             }}
           />
@@ -279,7 +281,7 @@ export default function InspectorApp() {
         {step === "confirm" && (
           <ConfirmForm
             scanResult={draft.scanResult}
-            onBack={() => setStep("qr")}
+            onBack={() => setStep("location")}
             onConfirmed={({ fields, manualCorrected, originalValues }) => {
               setDraft((d) => ({ ...d, fields, manualCorrected, originalValues }));
               setStep("judgment");
@@ -321,7 +323,7 @@ export default function InspectorApp() {
               <li><span>帳單編號</span><span>{draft.fields.ticket_no}</span></li>
               <li><span>車牌</span><span>{draft.fields.plate_no}</span></li>
               <li><span>判定</span><span>{draft.judgmentPreview?.judgement}</span></li>
-              <li><span>資料來源</span><span>{draft.scanResult.dataSource}{draft.manualCorrected ? " (稽查員已修正)" : ""}</span></li>
+              <li><span>資料來源</span><span>{sourceLabel(draft.scanResult.dataSource)}{draft.manualCorrected ? " (稽查員已修正)" : ""}</span></li>
               <li><span>目前網路狀態</span><span>{online ? "有網路" : "無網路（將離線暫存）"}</span></li>
             </ul>
             <div className="button-row">

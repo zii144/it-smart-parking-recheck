@@ -78,6 +78,8 @@ export const adminApi = {
   listCases: (filters) => request("GET", `/api/admin/cases${toQueryString(filters)}`),
   getCase: (id) => request("GET", `/api/admin/cases/${id}`),
   reviewCase: (id, payload) => request("POST", `/api/admin/cases/${id}/review`, payload),
+  updateCase: (id, payload) => request("PATCH", `/api/admin/cases/${id}`, payload),
+  deleteCase: (id) => request("DELETE", `/api/admin/cases/${id}`),
   stats: () => request("GET", "/api/admin/stats"),
   // CSV export is now an admin-protected route, so it can't be a plain <a href>
   // download (that wouldn't carry the Authorization header). Fetch it with the
