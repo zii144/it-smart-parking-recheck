@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
-import { STATUS_TEXT } from "../../format";
+import { STATUS_TEXT, SOURCE_TEXT } from "../../format";
 
 const MapView3D = lazy(() => import("./MapView3D"));
 
@@ -91,7 +91,7 @@ export default function StatsDashboard() {
 
   const judgementData = toChartData(stats.by_judgement, JUDGEMENT_LABELS, JUDGEMENT_COLORS, "#b9b3a8");
   const statusData = toChartData(stats.by_status, STATUS_TEXT, STATUS_COLORS, GOLD);
-  const sourceData = toChartData(stats.by_data_source, null, null, GOLD);
+  const sourceData = toChartData(stats.by_data_source, SOURCE_TEXT, null, GOLD);
   const districtData = toChartData(stats.by_district, null, null, GOLD);
   const inspectorData = toChartData(stats.by_inspector, null, null, GOLD);
   const trendData = stats.by_day || [];

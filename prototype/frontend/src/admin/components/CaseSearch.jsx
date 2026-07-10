@@ -5,7 +5,7 @@ import Spinner from "../../components/Spinner";
 import CaseDetailPanel from "./CaseDetailPanel";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../usePagination";
-import { shortDateTime } from "../../format";
+import { shortDateTime, sourceLabel } from "../../format";
 
 export default function CaseSearch({ adminUsername }) {
   const [cases, setCases] = useState([]);
@@ -112,7 +112,7 @@ export default function CaseSearch({ adminUsername }) {
                   <tr key={c.id}>
                     <td data-label="帳單編號">{c.ticket_no}</td>
                     <td data-label="地點">{c.district} {c.road} {c.spot_no}</td>
-                    <td data-label="來源">{c.data_source}</td>
+                    <td data-label="來源">{sourceLabel(c.data_source)}</td>
                     <td data-label="稽查員">{c.inspector_username}</td>
                     <td data-label="建立時間">{shortDateTime(c.created_at)}</td>
                     <td className="cell-action">

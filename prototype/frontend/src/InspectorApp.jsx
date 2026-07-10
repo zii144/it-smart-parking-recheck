@@ -16,6 +16,7 @@ import OfflineBar from "./components/OfflineBar";
 import CaseList from "./components/CaseList";
 import StepBadge from "./components/StepBadge";
 import StepProgress from "./components/StepProgress";
+import { sourceLabel } from "./format";
 
 const STEP_STATE_LABEL = {
   permission: "檢查權限中",
@@ -322,7 +323,7 @@ export default function InspectorApp() {
               <li><span>帳單編號</span><span>{draft.fields.ticket_no}</span></li>
               <li><span>車牌</span><span>{draft.fields.plate_no}</span></li>
               <li><span>判定</span><span>{draft.judgmentPreview?.judgement}</span></li>
-              <li><span>資料來源</span><span>{draft.scanResult.dataSource}{draft.manualCorrected ? " (稽查員已修正)" : ""}</span></li>
+              <li><span>資料來源</span><span>{sourceLabel(draft.scanResult.dataSource)}{draft.manualCorrected ? " (稽查員已修正)" : ""}</span></li>
               <li><span>目前網路狀態</span><span>{online ? "有網路" : "無網路（將離線暫存）"}</span></li>
             </ul>
             <div className="button-row">
