@@ -3,6 +3,7 @@ import { Search, Download, Inbox, Eye } from "lucide-react";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
 import CaseDetailPanel from "./CaseDetailPanel";
+import { shortDateTime } from "../../format";
 
 export default function CaseSearch({ adminUsername }) {
   const [cases, setCases] = useState([]);
@@ -109,7 +110,7 @@ export default function CaseSearch({ adminUsername }) {
                   <td data-label="地點">{c.district} {c.road} {c.spot_no}</td>
                   <td data-label="來源">{c.data_source}</td>
                   <td data-label="稽查員">{c.inspector_username}</td>
-                  <td data-label="建立時間">{c.created_at}</td>
+                  <td data-label="建立時間">{shortDateTime(c.created_at)}</td>
                   <td className="cell-action">
                     <button className="btn-secondary" onClick={() => setSelected(c)}>
                       <Eye size={13} /> 檢視

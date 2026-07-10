@@ -51,7 +51,7 @@
 }
 
 .admin-main {
-  max-width: 880px;
+  max-width: 1040px;
 }
 
 /* ---------- Stat cards ---------- */
@@ -172,11 +172,15 @@
 
 .filter-bar label {
   margin-bottom: 0;
-  min-width: 150px;
+  flex: 1 1 170px;
+  min-width: 140px;
 }
 
+/* Push the search action to the right end of the panel instead of leaving it
+   orphaned at the left of a wrapped row. */
 .filter-bar button {
   height: 42px;
+  margin-left: auto;
 }
 
 /* ---------- Inline forms (accounts / locations) ---------- */
