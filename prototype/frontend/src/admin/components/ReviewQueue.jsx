@@ -3,7 +3,7 @@ import { ClipboardList, Inbox, Eye } from "lucide-react";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
 import CaseDetailPanel from "./CaseDetailPanel";
-import { shortDateTime } from "../../format";
+import { shortDateTime, statusLabel } from "../../format";
 
 const JUDGE_LABEL = {
   COMPLIANT: { text: "符合規定", cls: "pill-ok" },
@@ -69,7 +69,7 @@ export default function ReviewQueue({ adminUsername }) {
                     <td data-label="帳單編號">{c.ticket_no}</td>
                     <td data-label="地點">{c.district} {c.road} {c.spot_no}</td>
                     <td data-label="判定"><span className={`pill ${judge.cls}`}>{judge.text}</span></td>
-                    <td data-label="狀態"><span className="pill pill-warn">{c.status}</span></td>
+                    <td data-label="狀態"><span className={`pill ${statusLabel(c.status).cls}`}>{statusLabel(c.status).text}</span></td>
                     <td data-label="重複">{c.duplicate_warning ? <span className="pill pill-error">是</span> : "—"}</td>
                     <td data-label="稽查員">{c.inspector_username}</td>
                     <td data-label="建立時間">{shortDateTime(c.created_at)}</td>
