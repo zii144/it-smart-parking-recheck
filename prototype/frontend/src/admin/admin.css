@@ -225,6 +225,27 @@
   max-width: 560px;
   max-height: 88vh;
   overflow-y: auto;
+  /* Subtle rounded scrollbar instead of the chunky native one that clashes
+     with the modal's rounded corners. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(28, 30, 34, 0.24) transparent;
+}
+.modal-card-lg::-webkit-scrollbar {
+  width: 12px;
+}
+.modal-card-lg::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 14px 0;
+}
+.modal-card-lg::-webkit-scrollbar-thumb {
+  background: rgba(28, 30, 34, 0.2);
+  border-radius: 999px;
+  border: 4px solid transparent;
+  background-clip: padding-box;
+}
+.modal-card-lg::-webkit-scrollbar-thumb:hover {
+  background: rgba(28, 30, 34, 0.36);
+  background-clip: padding-box;
 }
 
 .modal-card-header {
