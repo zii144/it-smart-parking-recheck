@@ -342,6 +342,20 @@ select:focus {
   padding: 4px;
   max-height: 240px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(28, 30, 34, 0.24) transparent;
+}
+.combo-list::-webkit-scrollbar {
+  width: 10px;
+}
+.combo-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.combo-list::-webkit-scrollbar-thumb {
+  background: rgba(28, 30, 34, 0.2);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 .combo-option {
