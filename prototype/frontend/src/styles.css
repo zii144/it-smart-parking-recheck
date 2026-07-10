@@ -150,6 +150,14 @@ body {
   margin: 0 auto;
 }
 
+/* The case-list screen gets a wider container so its table can render on
+   desktop (same behaviour as the admin tables) instead of being forced into
+   card mode by the narrow wizard width. On phones it's still below the
+   680px breakpoint, so it stays as stacked cards. */
+.app-main-wide {
+  max-width: 1040px;
+}
+
 /* ---------- Cards ---------- */
 
 .card {
