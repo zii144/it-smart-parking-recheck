@@ -139,7 +139,7 @@ cmd_update_production() {
     --exclude '.pytest_cache/' --exclude '*.pyc' \
     --exclude 'parking*.db*' --exclude 'uploads/' --exclude 'dist/' \
     --exclude '.env' --exclude '.env.*' \
-    --exclude 'dev.sh' --exclude 'Makefile' --exclude 'manual/' \
+    --exclude 'dev.sh' --exclude 'Makefile' --exclude 'manual/' --exclude 'manual.zip' \
     --exclude 'docker-compose.yml' --exclude '.DS_Store' \
     --exclude '*.swp' --exclude '*.swo' --exclude '*~' \
     --exclude 'PROMOTION.txt' \
@@ -272,7 +272,7 @@ cmd_diff() {
     --exclude '.pytest_cache/' --exclude '*.pyc' \
     --exclude 'parking*.db*' --exclude 'uploads/' --exclude 'dist/' \
     --exclude '.env' --exclude '.env.*' \
-    --exclude 'dev.sh' --exclude 'Makefile' --exclude 'manual/' \
+    --exclude 'dev.sh' --exclude 'Makefile' --exclude 'manual/' --exclude 'manual.zip' \
     --exclude 'docker-compose.yml' --exclude '.DS_Store' \
     --exclude '*.swp' --exclude '*.swo' --exclude '*~' --exclude 'PROMOTION.txt' \
     "$PROTOTYPE/" "$PRODUCTION/" | grep -vE '^\.d\.\.t' || true

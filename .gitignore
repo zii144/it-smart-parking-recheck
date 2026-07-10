@@ -5,4 +5,4 @@
 # Production secrets — never commit (see deploy/.env.production.example)
 deploy/.env.production
 target-sample/
-prototype/manual.zip
+manual.zip
