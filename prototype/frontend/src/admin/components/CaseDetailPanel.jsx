@@ -208,12 +208,6 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
               複核備註（選填）
               <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="補充說明給稽查員或後續複核參考" />
             </label>
-            <div className="button-row">
-              <button className="btn-primary" disabled={submitting} onClick={handleSubmitReview}>
-                {submitting ? <Loader2 size={15} className="spin-icon" /> : <Send size={15} />}
-                {submitting ? "送出中…" : "送出複核結果"}
-              </button>
-            </div>
           </div>
         )}
 
@@ -248,13 +242,23 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
             </>
           ) : (
             <>
+              {/* Destructive action separated on the left; forward actions
+                  grouped on the right with the primary (送出複核結果) rightmost. */}
               <button className="btn-danger" disabled={deleting} onClick={handleDelete}>
                 {deleting ? <Loader2 size={15} className="spin-icon" /> : <Trash2 size={15} />}
                 {deleting ? "刪除中…" : "刪除案件"}
               </button>
-              <button className="btn-secondary" onClick={() => setEditing(true)}>
-                <Pencil size={15} /> 編輯資料
-              </button>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn-secondary" onClick={() => setEditing(true)}>
+                  <Pencil size={15} /> 編輯資料
+                </button>
+                {canReview && (
+                  <button className="btn-primary" disabled={submitting} onClick={handleSubmitReview}>
+                    {submitting ? <Loader2 size={15} className="spin-icon" /> : <Send size={15} />}
+                    {submitting ? "送出中…" : "送出複核結果"}
+                  </button>
+                )}
+              </div>
             </>
           )}
         </div>
