@@ -443,20 +443,23 @@ button:active {
   transform: scale(0.98);
 }
 
+/* Primary = strong neutral (near-black), not the gold accent: gold reads as a
+   warning here (it's also the warning-pill colour), so reserve it for accents
+   and give the confirming CTA a high-contrast neutral fill. */
 .btn-primary {
-  background: var(--color-primary);
-  color: #231a06;
-  box-shadow: 0 8px 18px rgba(230, 160, 32, 0.30);
+  background: var(--color-panel);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(28, 30, 34, 0.22);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-  box-shadow: 0 10px 22px rgba(230, 160, 32, 0.38);
+  background: var(--color-panel-soft);
+  box-shadow: 0 10px 22px rgba(28, 30, 34, 0.28);
 }
 
 .btn-primary:disabled {
-  background: #ede3cf;
-  color: #b3a488;
+  background: #d9d5cd;
+  color: #a49f95;
   cursor: not-allowed;
   box-shadow: none;
 }
