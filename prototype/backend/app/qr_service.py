@@ -34,6 +34,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from . import taipei_parkingfee
 from .config import get_settings
 from .seed import QR_DEMO_CODES
 
@@ -65,10 +66,14 @@ class Resolution:
     ticket: dict | None = None
     query_url: str | None = None
     page_preview: str | None = None
+    web_info: dict | None = None  # provenance block for web-scraped tickets
 
     def to_response(self) -> dict:
         if self.status == "success":
-            return {"status": "success", "ticket": self.ticket}
+            out = {"status": "success", "ticket": self.ticket}
+            if self.web_info:
+                out["web_info"] = self.web_info
+            return out
         if self.status == "fetch_failed":
             return {
                 "status": "fetch_failed",
@@ -124,6 +129,16 @@ def _resolve_url(url: str, settings) -> Resolution:
         # Rejected before any network call (SSRF guard / not enabled).
         logger.warning("QR URL rejected by allow-list: %s", _safe_log_url(url))
         return Resolution("scan_failed")
+
+    # Real 臺北市停車繳費通知單 QR -> dedicated two-hop scrape worker
+    # (parkingfee.pma.gov.taipei summary + pay.taipei bill detail).
+    if taipei_parkingfee.matches(url):
+        result, preview = taipei_parkingfee.scrape(url, settings.qr_query_timeout)
+        if result is not None:
+            return Resolution("success", ticket=result["ticket"], web_info=result["web_info"])
+        # Reached but unparseable -> hand the inspector the page text to
+        # transcribe; unreachable -> plain fetch_failed.
+        return Resolution("fetch_failed", query_url=url, page_preview=preview)
 
     try:
         response = fetch_url(url, settings.qr_query_timeout)

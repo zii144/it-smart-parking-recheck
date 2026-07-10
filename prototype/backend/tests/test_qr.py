@@ -67,13 +67,23 @@ def test_empty_content_is_scan_failed():
 
 
 # --- real URL path --------------------------------------------------------
-def test_real_fetch_disabled_by_default_does_not_hit_network(monkeypatch):
-    # Empty allow-list (default) -> URL must be rejected before any fetch.
+def test_real_fetch_disabled_when_allowlist_empty(monkeypatch):
+    # QR_QUERY_ALLOWED_HOSTS="" -> URL must be rejected before any fetch.
+    monkeypatch.setattr(get_settings(), "qr_query_allowed_hosts", [])
+
     def _boom(url, timeout):
         raise AssertionError("fetch_url must not be called when host not allow-listed")
 
     monkeypatch.setattr(qr_service, "fetch_url", _boom)
     assert qr_service.resolve("https://qr.example.gov.tw/t/abc")["status"] == "scan_failed"
+
+
+def test_default_allowlist_is_exactly_the_taipei_chain(monkeypatch):
+    # Out of the box, only the two known government hosts are fetchable.
+    monkeypatch.delenv("QR_QUERY_ALLOWED_HOSTS", raising=False)
+    from app.config import Settings
+
+    assert Settings().qr_query_allowed_hosts == ["parkingfee.pma.gov.taipei", "pay.taipei"]
 
 
 def test_real_fetch_json(monkeypatch):
