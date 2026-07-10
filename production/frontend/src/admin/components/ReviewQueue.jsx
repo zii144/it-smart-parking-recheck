@@ -3,6 +3,9 @@ import { ClipboardList, Inbox, Eye } from "lucide-react";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
 import CaseDetailPanel from "./CaseDetailPanel";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../usePagination";
+import { shortDateTime, statusLabel } from "../../format";
 
 const JUDGE_LABEL = {
   COMPLIANT: { text: "符合規定", cls: "pill-ok" },
@@ -15,6 +18,7 @@ export default function ReviewQueue({ adminUsername }) {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const { page, setPage, pageSize, setPageSize, pageItems, total, pageCount } = usePagination(cases);
 
   function load() {
     setLoading(true);
@@ -46,6 +50,7 @@ export default function ReviewQueue({ adminUsername }) {
           <p>目前沒有待複核案件。</p>
         </div>
       ) : (
+        <>
         <div className="table-scroll">
           <table className="case-table">
             <thead>
@@ -61,18 +66,18 @@ export default function ReviewQueue({ adminUsername }) {
               </tr>
             </thead>
             <tbody>
-              {cases.map((c) => {
+              {pageItems.map((c) => {
                 const judge = JUDGE_LABEL[c.judgement] ?? { text: c.judgement, cls: "pill-neutral" };
                 return (
                   <tr key={c.id}>
-                    <td>{c.ticket_no}</td>
-                    <td>{c.district} {c.road} {c.spot_no}</td>
-                    <td><span className={`pill ${judge.cls}`}>{judge.text}</span></td>
-                    <td><span className="pill pill-warn">{c.status}</span></td>
-                    <td>{c.duplicate_warning ? <span className="pill pill-error">是</span> : "—"}</td>
-                    <td>{c.inspector_username}</td>
-                    <td>{c.created_at}</td>
-                    <td>
+                    <td data-label="帳單編號">{c.ticket_no}</td>
+                    <td data-label="地點">{c.district} {c.road} {c.spot_no}</td>
+                    <td data-label="判定"><span className={`pill ${judge.cls}`}>{judge.text}</span></td>
+                    <td data-label="狀態"><span className={`pill ${statusLabel(c.status).cls}`}>{statusLabel(c.status).text}</span></td>
+                    <td data-label="重複">{c.duplicate_warning ? <span className="pill pill-error">是</span> : "—"}</td>
+                    <td data-label="稽查員">{c.inspector_username}</td>
+                    <td data-label="建立時間">{shortDateTime(c.created_at)}</td>
+                    <td className="cell-action">
                       <button className="btn-secondary" onClick={() => setSelected(c)}>
                         <Eye size={13} /> 複核
                       </button>
@@ -83,6 +88,11 @@ export default function ReviewQueue({ adminUsername }) {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page} pageSize={pageSize} total={total} pageCount={pageCount}
+          onPage={setPage} onPageSize={setPageSize}
+        />
+        </>
       )}
 
       {selected && (

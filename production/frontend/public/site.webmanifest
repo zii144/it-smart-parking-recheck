@@ -1,0 +1,23 @@
+{
+  "name": "停車單稽查系統",
+  "short_name": "停車單稽查",
+  "description": "停車單稽查系統 — 現場複查、判定與後台複核",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "theme_color": "#e6a020",
+  "background_color": "#f5f2ec",
+  "display": "standalone",
+  "start_url": "/"
+}

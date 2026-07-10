@@ -1,3 +1,4 @@
+import { LucideProvider } from "lucide-react";
 import InspectorApp from "./InspectorApp";
 import AdminApp from "./admin/AdminApp";
 
@@ -9,5 +10,10 @@ import AdminApp from "./admin/AdminApp";
 // path by default, so a hard navigation to /admin still loads this app.
 export default function App() {
   const isAdmin = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
-  return isAdmin ? <AdminApp /> : <InspectorApp />;
+  // Heavier, rounded icon weight app-wide for a softer, friendlier look.
+  return (
+    <LucideProvider strokeWidth={2.5}>
+      {isAdmin ? <AdminApp /> : <InspectorApp />}
+    </LucideProvider>
+  );
 }

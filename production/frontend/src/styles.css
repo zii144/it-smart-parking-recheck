@@ -1,28 +1,32 @@
 :root {
-  --color-primary: #2f6feb;
-  --color-primary-dark: #1f56c7;
-  --color-primary-light: #eaf1ff;
-  --color-ink: #0f1720;
-  --color-muted: #64748b;
-  --color-border: #e2e6ed;
+  /* Gold accent + warm neutral palette (Crypt-inspired redesign). */
+  --color-primary: #e6a020;
+  --color-primary-dark: #c9861a;
+  --color-primary-light: #fbeecd;
+  --color-ink: #1b1d21;
+  --color-muted: #8b8f98;
+  --color-border: #ece7de;
+  --color-line: #f0ece4;
   --color-surface: #ffffff;
-  --color-bg: #f3f5f9;
+  --color-bg: #f5f2ec;
+  --color-panel: #1c1e22;      /* dark stat/hero panel */
+  --color-panel-soft: #26282d;
 
-  --color-success: #16a34a;
-  --color-success-bg: #e9f9ef;
-  --color-warning: #b45309;
-  --color-warning-bg: #fff3e0;
-  --color-danger: #c02b3a;
-  --color-danger-bg: #fdeced;
+  --color-success: #159a63;
+  --color-success-bg: #e4f5ec;
+  --color-warning: #c9861a;
+  --color-warning-bg: #fbeecd;
+  --color-danger: #e0483f;
+  --color-danger-bg: #fcebe9;
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
   --radius-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 32, 0.06);
-  --shadow-md: 0 6px 20px rgba(15, 23, 32, 0.08);
-  --shadow-lg: 0 12px 32px rgba(15, 23, 32, 0.14);
+  --shadow-sm: 0 1px 2px rgba(28, 30, 34, 0.05);
+  --shadow-md: 0 10px 28px rgba(28, 30, 34, 0.06);
+  --shadow-lg: 0 20px 44px rgba(28, 30, 34, 0.12);
 
   --space-4: 16px;
   --space-5: 24px;
@@ -38,7 +42,10 @@ body {
   margin: 0;
   font-family: -apple-system, "Inter", "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
   background: var(--color-bg);
-  background-image: radial-gradient(circle at 10% -10%, #eaf1ff 0%, transparent 45%);
+  background-image:
+    radial-gradient(circle at 100% -5%, rgba(230, 160, 32, 0.10) 0%, transparent 38%),
+    radial-gradient(circle at 0% 105%, rgba(230, 160, 32, 0.06) 0%, transparent 40%);
+  background-attachment: fixed;
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
 }
@@ -62,51 +69,77 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 14px 20px;
-  background: linear-gradient(135deg, #16223a, #1f2f4d);
-  color: white;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(1.4) blur(12px);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  color: var(--color-ink);
+  border-bottom: 1px solid var(--color-line);
   position: sticky;
   top: 0;
   z-index: 20;
-  box-shadow: var(--shadow-md);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 
 .brand .brand-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.14);
-  color: #9dc0ff;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--color-primary), #f0b84a);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(230, 160, 32, 0.32);
 }
 
 .brand .inspector-name {
-  font-weight: 400;
-  opacity: 0.75;
+  font-weight: 500;
+  color: var(--color-muted);
   font-size: 13px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Both actions are ghost pills — but one is an <a> (後台管理) and one is a
+   <button> (登出). The base button padding/radius only hits <button>, so
+   normalise the box model here for both, and kill the anchor's underline. */
 .header-actions .btn-ghost {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  color: var(--color-ink);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .header-actions .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+  text-decoration: none;
+}
+
+.header-actions .btn-ghost svg {
+  opacity: 0.85;
 }
 
 .app-main {
@@ -117,14 +150,22 @@ body {
   margin: 0 auto;
 }
 
+/* The case-list screen gets a wider container so its table can render on
+   desktop (same behaviour as the admin tables) instead of being forced into
+   card mode by the narrow wizard width. On phones it's still below the
+   680px breakpoint, so it stays as stacked cards. */
+.app-main-wide {
+  max-width: 1040px;
+}
+
 /* ---------- Cards ---------- */
 
 .card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
   padding: 24px 26px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   margin-bottom: 18px;
   animation: rise-in 0.25s ease;
 }
@@ -208,6 +249,211 @@ select:focus {
   box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
+/* ---------- Searchable select (combobox) ---------- */
+.field {
+  margin-bottom: 14px;
+}
+
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.combo {
+  position: relative;
+  margin-top: 6px;
+}
+
+.combo-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--color-ink);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.combo-control:hover:not(:disabled) {
+  border-color: #cdd4df;
+}
+
+.combo-control:disabled {
+  background: var(--color-bg);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.combo-placeholder {
+  color: var(--color-muted);
+}
+
+.combo-chevron {
+  color: var(--color-muted);
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+.combo-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.combo-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.combo-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-muted);
+}
+.combo-search input {
+  border: none;
+  margin: 0;
+  padding: 2px 0;
+  font-size: 14px;
+  box-shadow: none;
+}
+.combo-search input:focus {
+  box-shadow: none;
+}
+
+.combo-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(28, 30, 34, 0.24) transparent;
+}
+.combo-list::-webkit-scrollbar {
+  width: 10px;
+}
+.combo-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.combo-list::-webkit-scrollbar-thumb {
+  background: rgba(28, 30, 34, 0.2);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.combo-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink);
+  font-size: 15px;
+  font-weight: 400;
+  text-align: left;
+}
+.combo-option:hover {
+  background: var(--color-bg);
+}
+.combo-option.is-selected {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.combo-option.is-selected svg {
+  color: var(--color-primary);
+}
+
+.combo-empty {
+  padding: 14px 12px;
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.combo-count {
+  padding: 6px 12px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+/* ---------- Segmented control (QR / OCR toggle) ----------
+   A clearly-defined pill toggle: a visible sunken track with a raised, sliding
+   active segment, so it reads as one two-state control rather than two loose
+   buttons. */
+.segmented {
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  margin-bottom: 14px;
+  background: #e9e1d4;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+.segmented button {
+  flex: 1;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  transition: color 0.15s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.segmented button:hover:not(.active) {
+  color: var(--color-ink);
+}
+.segmented button.active {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  box-shadow: 0 2px 6px rgba(28, 30, 34, 0.12);
+}
+.segmented button.active svg {
+  color: var(--color-primary);
+}
+
+/* ---------- OCR capture ---------- */
+.ocr-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 4px;
+  font-size: 14px;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.ocr-raw {
+  margin: 10px 0 0;
+}
+.ocr-raw summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
 input::placeholder {
   color: #9aa5b1;
 }
@@ -218,13 +464,13 @@ button {
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   border: none;
-  padding: 11px 18px;
+  padding: 12px 20px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: transform 0.05s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.05s ease, background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   white-space: nowrap;
 }
 
@@ -232,35 +478,41 @@ button:active {
   transform: scale(0.98);
 }
 
+/* Primary = strong neutral (near-black), not the gold accent: gold reads as a
+   warning here (it's also the warning-pill colour), so reserve it for accents
+   and give the confirming CTA a high-contrast neutral fill. */
 .btn-primary {
-  background: var(--color-primary);
-  color: white;
-  box-shadow: var(--shadow-sm);
+  background: var(--color-panel);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(28, 30, 34, 0.22);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-dark);
+  background: var(--color-panel-soft);
+  box-shadow: 0 10px 22px rgba(28, 30, 34, 0.28);
 }
 
 .btn-primary:disabled {
-  background: #b7c9ef;
+  background: #d9d5cd;
+  color: #a49f95;
   cursor: not-allowed;
   box-shadow: none;
 }
 
 .btn-secondary {
-  background: var(--color-bg);
+  background: var(--color-surface);
   color: var(--color-ink);
   border: 1px solid var(--color-border);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #e9ecf2;
+  background: var(--color-bg);
+  border-color: #ddd6c9;
 }
 
 .btn-link {
   background: none;
-  color: var(--color-primary);
+  color: var(--color-primary-dark);
   padding: 4px 8px;
   font-weight: 600;
 }
@@ -273,6 +525,32 @@ button:active {
   background: transparent;
   border: 1px solid var(--color-border);
   color: var(--color-ink);
+}
+
+.btn-danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid transparent;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #f9dbde;
+  border-color: var(--color-danger);
+}
+
+/* Two-column editable case fields in the admin detail modal. */
+.edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+  margin: 4px 0 8px;
+}
+.edit-grid label {
+  margin-bottom: 12px;
+}
+@media (max-width: 520px) {
+  .edit-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .btn-block {
@@ -357,20 +635,31 @@ button:active {
 
 /* ---------- Step progress ---------- */
 
-.step-progress {
+/* Stepper: each item is an equal-width column with the circle centred and its
+   label centred directly beneath it, so circles and labels always line up.
+   Connector lines are the segments beside each circle (hidden at the ends). */
+.stepper {
   display: flex;
-  align-items: center;
-  margin-bottom: 6px;
+  margin: 0 0 20px;
   padding: 0 2px;
 }
 
-.step-progress .step {
-  display: flex;
-  align-items: center;
+.stepper-item {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
 }
 
-.step-progress .step-circle {
+.stepper-rail {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.stepper-dot {
+  flex: 0 0 auto;
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -381,51 +670,43 @@ button:active {
   font-weight: 700;
   background: var(--color-border);
   color: var(--color-muted);
-  flex-shrink: 0;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.step-progress .step.done .step-circle {
+.stepper-item.done .stepper-dot,
+.stepper-item.current .stepper-dot {
   background: var(--color-primary);
-  color: white;
+  color: #fff;
 }
 
-.step-progress .step.current .step-circle {
-  background: var(--color-primary);
-  color: white;
+.stepper-item.current .stepper-dot {
   box-shadow: 0 0 0 4px var(--color-primary-light);
 }
 
-.step-progress .step-line {
+.stepper-seg {
   flex: 1;
   height: 2px;
   background: var(--color-border);
-  margin: 0 4px;
 }
 
-.step-progress .step.done .step-line {
+.stepper-seg.is-active {
   background: var(--color-primary);
 }
 
-.step-progress-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--color-muted);
-  margin: 4px 2px 20px;
+.stepper-seg.is-hidden {
+  visibility: hidden;
 }
 
-.step-progress-labels span {
-  flex: 1;
+.stepper-label {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--color-muted);
   text-align: center;
 }
 
-.step-progress-labels span:first-child {
-  text-align: left;
-}
-
-.step-progress-labels span:last-child {
-  text-align: right;
+.stepper-item.current .stepper-label {
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 /* ---------- QR scan tiles ---------- */
@@ -591,6 +872,7 @@ button:active {
   border-radius: var(--radius-pill);
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .pill-ok { background: var(--color-success-bg); color: var(--color-success); }
@@ -762,9 +1044,9 @@ button:active {
 
 .table-scroll {
   overflow-x: auto;
-  margin-top: 10px;
+  margin-top: 12px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-line);
 }
 
 .case-table {
@@ -775,22 +1057,241 @@ button:active {
 
 .case-table th {
   text-align: left;
-  padding: 10px 12px;
+  padding: 12px 12px;
   background: var(--color-bg);
   color: var(--color-muted);
   font-weight: 700;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
 .case-table td {
   text-align: left;
-  padding: 10px 12px;
-  border-top: 1px solid var(--color-border);
-  white-space: nowrap;
+  padding: 12px 12px;
+  border-top: 1px solid var(--color-line);
+  vertical-align: middle;
+  /* Let cells wrap at natural break points so the table fits its container
+     instead of forcing a bottom horizontal scrollbar (unreachable once there
+     are many rows). Not break-anywhere — that collapses columns and wraps
+     pills/ticket numbers mid-token even when there's room. keep-all stops CJK
+     text (地點) from breaking between every character. */
+  white-space: normal;
+  word-break: keep-all;
 }
 
 .case-table tbody tr:hover {
   background: var(--color-bg);
+}
+
+/* ---------- Responsive data tables ----------
+   On narrow screens a horizontal-scrolling table is unreadable, so each row
+   becomes a self-contained card and every cell shows its column name (from a
+   data-label attribute). thead is kept for screen readers but hidden. */
+@media (max-width: 680px) {
+  .table-scroll {
+    overflow-x: visible;
+    border: none;
+    border-radius: 0;
+  }
+  .case-table,
+  .case-table tbody,
+  .case-table tr,
+  .case-table td {
+    display: block;
+    width: 100%;
+  }
+  .case-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .case-table tr {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 4px 2px;
+    margin-bottom: 12px;
+  }
+  .case-table tbody tr:hover {
+    background: var(--color-surface);
+  }
+  .case-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    text-align: right;
+    white-space: normal;
+    border-top: none;
+    padding: 9px 14px;
+  }
+  .case-table td + td {
+    border-top: 1px solid var(--color-line);
+  }
+  .case-table td::before {
+    content: attr(data-label);
+    flex: 0 0 38%;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+  /* Action cell (a button) spans the full width with no label. */
+  .case-table td.cell-action {
+    padding: 12px 14px 6px;
+  }
+  .case-table td.cell-action::before {
+    content: none;
+  }
+  .case-table td.cell-action .btn-secondary,
+  .case-table td.cell-action .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ---------- Purpose-built mobile case cards (inspector list) ----------
+   The generic table→row transform is fine on the admin's short tables, but the
+   inspector list has 9 columns, which stacks into a tall, form-like dump on a
+   phone. Render a compact, scannable card instead: ticket as the title, the
+   judgement/status as prominent pills, everything else condensed. */
+.case-list-cards {
+  display: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (max-width: 680px) {
+  .case-list-table {
+    display: none;
+  }
+  .case-list-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+  }
+}
+
+.mcard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mcard-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mcard-title {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  word-break: break-all;
+}
+.mcard-loc {
+  color: var(--color-muted);
+  font-size: 13px;
+  margin-top: -2px;
+}
+.mcard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.mcard-tag {
+  font-size: 12px;
+  color: var(--color-muted);
+  background: var(--color-bg);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+}
+.mcard-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--color-line);
+  padding-top: 9px;
+  margin-top: 2px;
+}
+.mcard-time {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+/* ---------- Pagination ---------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+.pagination-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.pagination-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+.pagination-size select {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.pagination-info {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.pagination-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pagination-nav button {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.pagination-page {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-muted);
+  min-width: 48px;
+  text-align: center;
+}
+@media (max-width: 560px) {
+  .pagination {
+    justify-content: center;
+  }
+  .pagination-nav {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 
 .empty-state {
@@ -899,7 +1400,7 @@ button:active {
     justify-content: center;
   }
 
-  .step-progress-labels span {
+  .stepper-label {
     display: none;
   }
 }

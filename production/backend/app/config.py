@@ -95,11 +95,14 @@ class Settings:
         # - demo mode resolves the built-in QR-A1001... codes without a network
         #   call, so the app is demoable/testable out of the box.
         # - real URLs decoded from a QR are only fetched if their host is on
-        #   this allow-list. Empty (the default) = real fetching is DISABLED, so
-        #   the backend never fetches arbitrary QR-supplied URLs (SSRF safety).
-        #   Set QR_QUERY_ALLOWED_HOSTS to the real query-site host to enable.
+        #   this allow-list. The default covers the real Taipei ticket chain
+        #   (parkingfee.pma.gov.taipei QR page -> pay.taipei bill portal); the
+        #   scrape worker additionally pins every redirect hop to these hosts.
+        #   Set QR_QUERY_ALLOWED_HOSTS="" to disable real fetching entirely.
         self.qr_demo_mode: bool = _env_bool("QR_DEMO_MODE", True)
-        raw_qr_hosts = os.environ.get("QR_QUERY_ALLOWED_HOSTS", "")
+        raw_qr_hosts = os.environ.get(
+            "QR_QUERY_ALLOWED_HOSTS", "parkingfee.pma.gov.taipei,pay.taipei"
+        )
         self.qr_query_allowed_hosts: list[str] = [
             h.strip().lower() for h in raw_qr_hosts.split(",") if h.strip()
         ]

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ClipboardCheck, CheckCircle2, FileWarning, PenLine, ArrowLeft, ArrowRight } from "lucide-react";
+import { ClipboardCheck, CheckCircle2, FileWarning, PenLine, ArrowLeft, ArrowRight, Globe, MapPin } from "lucide-react";
 
 const EMPTY = {
   ticket_no: "",
@@ -86,10 +86,36 @@ export default function ConfirmForm({ scanResult, onConfirmed, onBack }) {
           <span>QR Code 掃描失敗，請依紙本停車單內容人工輸入。</span>
         </div>
       )}
-      {scanResult.status === "success" && (
+      {scanResult.status === "success" && !scanResult.webInfo && (
         <div className="info-box success">
           <CheckCircle2 size={16} />
           <span>已自動帶入 QR 查詢頁資料，請確認內容是否正確。</span>
+        </div>
+      )}
+      {scanResult.status === "success" && scanResult.webInfo && (
+        <div className="info-box success">
+          <Globe size={16} />
+          <div>
+            <p style={{ margin: "0 0 4px" }}>
+              已由<strong>臺北市停車繳費系統</strong>線上查詢並自動帶入車牌與停車資訊，請確認內容是否正確。
+            </p>
+            <p className="muted small" style={{ margin: "0 0 6px" }}>
+              來源：{scanResult.webInfo.source_host}
+              {scanResult.webInfo.final_host ? ` → ${scanResult.webInfo.final_host}` : ""}
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              <span className={`pill ${scanResult.webInfo.paid ? "pill-ok" : "pill-warn"}`}>
+                {scanResult.webInfo.paid ? "已繳費" : "未繳費"}
+              </span>
+              {scanResult.webInfo.rate && <span className="pill pill-neutral">費率：{scanResult.webInfo.rate}</span>}
+              {scanResult.webInfo.amount_is_discounted && (
+                <span className="pill pill-neutral">金額為行動支付優惠後</span>
+              )}
+            </div>
+            <p className="muted small" style={{ margin: "8px 0 0", display: "flex", alignItems: "center", gap: 4 }}>
+              <MapPin size={12} /> 停車地點 / 行政區未隨帳單提供，請於上一步確認稽查地點。
+            </p>
+          </div>
         </div>
       )}
 
@@ -135,7 +161,7 @@ export default function ConfirmForm({ scanResult, onConfirmed, onBack }) {
 
         <div className="button-row">
           <button type="button" className="btn-secondary" onClick={onBack}>
-            <ArrowLeft size={15} /> 返回重新掃描
+            <ArrowLeft size={15} /> 返回上一步
           </button>
           <button type="submit" className="btn-primary">
             確認資料，計算開單時效 <ArrowRight size={15} />
