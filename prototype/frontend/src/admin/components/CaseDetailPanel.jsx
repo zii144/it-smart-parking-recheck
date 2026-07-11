@@ -113,7 +113,7 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
   ];
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay modal-overlay-drawer" onClick={onClose}>
       <div className="modal-card modal-card-lg" onClick={(e) => e.stopPropagation()}>
         <div className="modal-card-header">
           <h2>案件詳情 #{caseData.id}{editing ? "（編輯中）" : ""}</h2>

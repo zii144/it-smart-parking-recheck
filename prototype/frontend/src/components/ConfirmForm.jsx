@@ -16,8 +16,10 @@ function toDatetimeLocal(iso) {
   return iso.length >= 16 ? iso.slice(0, 16) : iso;
 }
 
-export default function ConfirmForm({ scanResult, onConfirmed, onBack }) {
-  const initial = useMemo(() => {
+export default function ConfirmForm({ scanResult, savedFields, onConfirmed, onBack }) {
+  // Baseline = the values the scan auto-filled (or EMPTY for manual entry).
+  // Used to detect whether the inspector manually corrected anything.
+  const scanBaseline = useMemo(() => {
     if (scanResult.status === "success") {
       const t = scanResult.ticket;
       return {
@@ -33,6 +35,26 @@ export default function ConfirmForm({ scanResult, onConfirmed, onBack }) {
     return EMPTY;
   }, [scanResult]);
 
+  // Editable starting values: prefer anything already saved on this draft
+  // (so jumping back to 確認 preserves the inspector's edits) over the scan
+  // baseline.
+  const initial = useMemo(() => {
+    if (savedFields) {
+      return {
+        ticket_no: savedFields.ticket_no ?? "",
+        plate_no: savedFields.plate_no ?? "",
+        amount: savedFields.amount != null ? String(savedFields.amount) : "",
+        due_date: savedFields.due_date ?? "",
+        parking_date: savedFields.parking_date ?? "",
+        parking_start: toDatetimeLocal(savedFields.parking_start),
+        parking_end: toDatetimeLocal(savedFields.parking_end),
+      };
+    }
+    return scanBaseline;
+    // Snapshot once on mount; later saves shouldn't stomp in-progress edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [fields, setFields] = useState(initial);
 
   function update(key, value) {
@@ -42,11 +64,11 @@ export default function ConfirmForm({ scanResult, onConfirmed, onBack }) {
   function handleSubmit(e) {
     e.preventDefault();
 
-    const changedKeys = Object.keys(initial).filter((k) => (initial[k] || "") !== (fields[k] || ""));
+    const changedKeys = Object.keys(scanBaseline).filter((k) => (scanBaseline[k] || "") !== (fields[k] || ""));
     const isAutoFilled = scanResult.status === "success";
     const manualCorrected = isAutoFilled && changedKeys.length > 0;
     const originalValues = manualCorrected
-      ? Object.fromEntries(changedKeys.map((k) => [k, initial[k]]))
+      ? Object.fromEntries(changedKeys.map((k) => [k, scanBaseline[k]]))
       : null;
 
     onConfirmed({
