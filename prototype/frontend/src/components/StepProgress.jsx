@@ -1,35 +1,54 @@
-const STEPS = [
-  { key: "qr", label: "取得" },
-  { key: "location", label: "地點" },
-  { key: "confirm", label: "確認" },
-  { key: "judgment", label: "判定" },
-  { key: "photo", label: "拍照" },
-  { key: "save", label: "儲存" },
-];
+import { Check } from "lucide-react";
+import { WIZARD_STEPS, wizardIndex } from "../wizardSteps";
 
-// Visual stepper for the new-case wizard (location -> qr -> confirm ->
-// judgment -> photo -> save). Not shown outside that flow (login/permission/
-// list/done have their own screens). Each item is an equal-width column so the
-// circle and its label stay vertically aligned; the segments beside a circle
-// are the connector lines (hidden at the two ends).
-export default function StepProgress({ step }) {
-  const currentIndex = STEPS.findIndex((s) => s.key === step);
+// Interactive stepper for the new-case wizard (取得 → 地點 → 確認 → 判定 →
+// 拍照 → 儲存). Doubles as a tab bar: any already-reached step (index ≤
+// maxIndex) is clickable so the inspector can jump back and forth; steps
+// beyond the furthest reached are locked. Renders horizontally (mobile tab
+// bar) or vertically (desktop rail) via `orientation`.
+//
+// Not shown outside the wizard (login/permission/list/done have their own
+// screens).
+export default function StepProgress({ step, maxIndex = 0, onJump, orientation = "horizontal" }) {
+  const currentIndex = wizardIndex(step);
   if (currentIndex === -1) return null;
 
   return (
-    <div className="stepper">
-      {STEPS.map((s, i) => {
-        const done = i < currentIndex;
+    <div className={`stepper stepper-${orientation}`} role="tablist" aria-label="開單步驟">
+      {WIZARD_STEPS.map((s, i) => {
         const current = i === currentIndex;
+        const reached = i <= maxIndex;
+        const done = reached && !current;
+        const locked = i > maxIndex;
+        const clickable = reached && !current && typeof onJump === "function";
+
+        const cls = [
+          "stepper-item",
+          done ? "done" : "",
+          current ? "current" : "",
+          locked ? "locked" : "",
+          clickable ? "clickable" : "",
+        ].filter(Boolean).join(" ");
+
         return (
-          <div key={s.key} className={`stepper-item ${done ? "done" : ""} ${current ? "current" : ""}`}>
-            <div className="stepper-rail">
-              <span className={`stepper-seg ${i === 0 ? "is-hidden" : ""} ${i <= currentIndex ? "is-active" : ""}`} />
-              <span className="stepper-dot">{i + 1}</span>
-              <span className={`stepper-seg ${i === STEPS.length - 1 ? "is-hidden" : ""} ${i < currentIndex ? "is-active" : ""}`} />
-            </div>
+          <button
+            key={s.key}
+            type="button"
+            className={cls}
+            role="tab"
+            aria-selected={current}
+            aria-current={current ? "step" : undefined}
+            disabled={!clickable}
+            onClick={clickable ? () => onJump(s.key) : undefined}
+            title={locked ? "尚未能跳至此步驟" : s.label}
+          >
+            <span className="stepper-rail">
+              <span className={`stepper-seg seg-before ${i === 0 ? "is-hidden" : ""} ${i <= currentIndex ? "is-active" : ""}`} />
+              <span className="stepper-dot">{done ? <Check size={14} strokeWidth={3} /> : i + 1}</span>
+              <span className={`stepper-seg seg-after ${i === WIZARD_STEPS.length - 1 ? "is-hidden" : ""} ${i < currentIndex ? "is-active" : ""}`} />
+            </span>
             <span className="stepper-label">{s.label}</span>
-          </div>
+          </button>
         );
       })}
     </div>

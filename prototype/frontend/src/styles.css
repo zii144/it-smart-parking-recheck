@@ -640,28 +640,38 @@ button:active {
    Connector lines are the segments beside each circle (hidden at the ends). */
 .stepper {
   display: flex;
-  margin: 0 0 20px;
-  padding: 0 2px;
 }
 
+/* Each step is a real button now (tap to jump). Strip the native chrome. */
 .stepper-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  appearance: none;
+  border: none;
+  background: none;
+  font: inherit;
+  padding: 0;
+  color: inherit;
   min-width: 0;
+}
+
+.stepper-item.clickable {
+  cursor: pointer;
+}
+.stepper-item:disabled {
+  cursor: default;
+}
+.stepper-item.locked {
+  opacity: 0.5;
 }
 
 .stepper-rail {
   display: flex;
   align-items: center;
-  width: 100%;
 }
 
 .stepper-dot {
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -670,7 +680,7 @@ button:active {
   font-weight: 700;
   background: var(--color-border);
   color: var(--color-muted);
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .stepper-item.done .stepper-dot,
@@ -678,35 +688,183 @@ button:active {
   background: var(--color-primary);
   color: #fff;
 }
-
+.stepper-item.done .stepper-dot {
+  background: var(--color-primary-dark, var(--color-primary));
+}
 .stepper-item.current .stepper-dot {
+  box-shadow: 0 0 0 4px var(--color-primary-light);
+}
+.stepper-item.clickable:hover .stepper-dot {
   box-shadow: 0 0 0 4px var(--color-primary-light);
 }
 
 .stepper-seg {
-  flex: 1;
   height: 2px;
   background: var(--color-border);
 }
-
 .stepper-seg.is-active {
   background: var(--color-primary);
 }
-
 .stepper-seg.is-hidden {
   visibility: hidden;
 }
 
 .stepper-label {
-  margin-top: 6px;
-  font-size: 10px;
   color: var(--color-muted);
+}
+.stepper-item.current .stepper-label {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+/* ---- Horizontal orientation: the mobile tab bar ---- */
+.stepper-horizontal {
+  margin: 0 0 18px;
+  padding: 10px 8px;
+  gap: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.stepper-horizontal .stepper-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.stepper-horizontal .stepper-rail {
+  width: 100%;
+}
+.stepper-horizontal .stepper-seg {
+  flex: 1;
+}
+.stepper-horizontal .stepper-label {
+  margin-top: 6px;
+  font-size: 11px;
   text-align: center;
 }
 
-.stepper-item.current .stepper-label {
-  color: var(--color-primary);
+/* ---- Vertical orientation: the desktop step rail ---- */
+.stepper-vertical {
+  flex-direction: column;
+}
+.stepper-vertical .stepper-item {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+}
+.stepper-vertical .stepper-rail {
+  flex-direction: column;
+  width: 28px;
+  align-self: stretch;
+}
+.stepper-vertical .stepper-seg {
+  width: 2px;
+  flex: 1;
+  min-height: 10px;
+}
+.stepper-vertical .stepper-label {
+  font-size: 13.5px;
   font-weight: 600;
+}
+
+/* ---------- New-case workspace (mobile: single column; desktop: two-pane) ---------- */
+.case-rail {
+  display: none;
+}
+
+@media (min-width: 860px) {
+  .app-main-workspace {
+    max-width: 960px;
+  }
+  .case-workspace {
+    display: grid;
+    grid-template-columns: 236px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .case-rail {
+    display: block;
+    position: sticky;
+    top: 90px;
+  }
+  /* On desktop the vertical rail replaces the horizontal tab bar. */
+  .case-stage > .stepper-horizontal {
+    display: none;
+  }
+  .case-stage > .card:first-child,
+  .case-stage > .segmented + .card {
+    margin-top: 0;
+  }
+}
+
+.draft-summary {
+  margin-top: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.draft-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--color-ink);
+  margin-bottom: 6px;
+}
+.draft-summary-list {
+  margin: 0;
+}
+.draft-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--color-line);
+  font-size: 13px;
+}
+.draft-row dt {
+  color: var(--color-muted);
+  flex-shrink: 0;
+}
+.draft-row dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+  color: var(--color-ink);
+  word-break: break-all;
+}
+.draft-row dd.is-empty {
+  color: var(--color-border);
+  font-weight: 400;
+}
+.draft-row dd.val-ok {
+  color: #159a63;
+}
+.draft-row dd.val-warn {
+  color: #c9861a;
+}
+.draft-net {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-line);
+  font-size: 12px;
+}
+.draft-net.on {
+  color: #159a63;
+}
+.draft-net.off {
+  color: #c9861a;
 }
 
 /* ---------- QR scan tiles ---------- */
@@ -1400,7 +1558,15 @@ button:active {
     justify-content: center;
   }
 
-  .stepper-label {
-    display: none;
+  /* Keep the step labels — they're the tab-bar labels now — just tighten. */
+  .stepper-horizontal {
+    padding: 8px 4px;
+  }
+  .stepper-horizontal .stepper-label {
+    font-size: 10px;
+  }
+  .stepper-horizontal .stepper-dot {
+    width: 24px;
+    height: 24px;
   }
 }

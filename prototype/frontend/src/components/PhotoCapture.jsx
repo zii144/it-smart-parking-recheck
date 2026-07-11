@@ -10,10 +10,12 @@ function fileToBase64(file) {
   });
 }
 
-export default function PhotoCapture({ onNext, onBack }) {
-  const [preview, setPreview] = useState(null);
-  const [base64, setBase64] = useState(null);
-  const [filename, setFilename] = useState(null);
+export default function PhotoCapture({ onNext, onBack, initialBase64 = null, initialFilename = null }) {
+  // Restore a previously-captured photo when the inspector jumps back to this
+  // step, so their evidence isn't lost.
+  const [preview, setPreview] = useState(initialBase64);
+  const [base64, setBase64] = useState(initialBase64);
+  const [filename, setFilename] = useState(initialFilename);
 
   async function handleFile(e) {
     const file = e.target.files?.[0];
