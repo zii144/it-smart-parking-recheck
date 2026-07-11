@@ -777,9 +777,57 @@ button:active {
   display: none;
 }
 
+/* Mobile: leave room for the fixed bottom step tab bar. */
+.app-main-workspace {
+  padding-bottom: 92px;
+}
+
+/* ---- Bottom orientation: the fixed mobile step tab bar ---- */
+.stepper-bottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  gap: 2px;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: saturate(1.4) blur(12px);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  border-top: 1px solid var(--color-line);
+  box-shadow: 0 -3px 14px rgba(16, 24, 40, 0.07);
+}
+.stepper-bottom .stepper-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 2px 3px;
+  border-radius: 12px;
+}
+.stepper-bottom .stepper-item.current {
+  background: var(--color-primary-light);
+}
+.stepper-bottom .stepper-item.clickable:active {
+  background: var(--color-bg);
+}
+.stepper-bottom .stepper-seg {
+  display: none;
+}
+.stepper-bottom .stepper-dot {
+  width: 26px;
+  height: 26px;
+}
+.stepper-bottom .stepper-label {
+  font-size: 11px;
+  line-height: 1;
+}
+
 @media (min-width: 860px) {
   .app-main-workspace {
     max-width: 960px;
+    padding-bottom: 60px;
   }
   .case-workspace {
     display: grid;
@@ -792,8 +840,8 @@ button:active {
     position: sticky;
     top: 90px;
   }
-  /* On desktop the vertical rail replaces the horizontal tab bar. */
-  .case-stage > .stepper-horizontal {
+  /* On desktop the vertical rail replaces the mobile bottom tab bar. */
+  .stepper-bottom {
     display: none;
   }
   .case-stage > .card:first-child,

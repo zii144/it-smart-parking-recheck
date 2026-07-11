@@ -276,6 +276,7 @@ export default function InspectorApp() {
         )}
 
         {wizardIndex(step) !== -1 && (
+          <>
           <div className="case-workspace">
             {/* Desktop rail: vertical step nav + running draft summary. */}
             <div className="case-rail">
@@ -284,9 +285,6 @@ export default function InspectorApp() {
             </div>
 
             <div className="case-stage">
-              {/* Mobile tab bar (hidden on desktop, where the rail takes over). */}
-              <StepProgress step={step} maxIndex={maxStep} onJump={handleJump} orientation="horizontal" />
-
               {step === "qr" && (
                 <AcquireStep
                   onResult={(res) => {
@@ -377,6 +375,11 @@ export default function InspectorApp() {
               )}
             </div>
           </div>
+
+          {/* Mobile: fixed bottom step tab bar (hidden on desktop, where the
+              vertical rail takes over). Tap a reached step to jump. */}
+          <StepProgress step={step} maxIndex={maxStep} onJump={handleJump} orientation="bottom" />
+          </>
         )}
 
         {step === "done" && (
