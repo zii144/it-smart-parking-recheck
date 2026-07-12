@@ -57,3 +57,19 @@ def test_export_headers_and_barcode_split(client, inspector_token, manager_token
     assert d[8] == "1210"        # I 時間 (barcode)
     assert d[9] == "45"          # J 秒 (barcode)
     assert d[10] == "" and d[11] == "" and d[12] == ""  # K/L/M reserved
+
+
+def test_export_neutralises_formula_injection(client, inspector_token, manager_token):
+    # A plate crafted to run as a spreadsheet formula must be exported as
+    # literal text (prefixed with ') so it can't execute in a reviewer's Excel.
+    _make_case(client, inspector_token, plate_no="=1+2")
+    res = client.get("/api/admin/export.csv", headers=auth(manager_token))
+    assert res.status_code == 200
+
+    text = res.text
+    if text and text[0] == "﻿":  # strip BOM
+        text = text[1:]
+    rows = list(csv.reader(io.StringIO(text)))
+
+    mine = [r for r in rows[2:] if r[5] == "'=1+2"]
+    assert mine, "formula-injection plate was not neutralised in the export"
