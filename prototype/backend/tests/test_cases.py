@@ -122,16 +122,24 @@ def test_duplicate_save_anyway_succeeds_with_warning(client, inspector_token):
     assert body["status"] == "REVIEW_REQUIRED"
 
 
-def test_listing_is_scoped_to_caller(client, inspector_token):
+def test_listing_is_scoped_to_caller(client, inspector_token, sysadmin_token):
     # insp01 saves a case...
     client.post("/api/cases", headers=auth(inspector_token), json=_clean_case_payload())
 
     mine = client.get("/api/cases", headers=auth(inspector_token)).json()
     assert any(c["ticket_no"] == "Q7036002A121045" for c in mine)
 
-    # ...insp02 must not see it.
-    other = client.post("/api/login", json={"username": "insp02", "password": "pass123"})
-    other_token = other.json()["token"]
+    # ...a different (permitted) inspector must not see it. Create one via the
+    # sysadmin API — insp02 is seeded without inspection permission, so it's
+    # blocked from the inspector API entirely and can't stand in here.
+    client.post(
+        "/api/admin/inspectors",
+        headers=auth(sysadmin_token),
+        json={"username": "insp99", "password": "pass123", "display_name": "另一位稽查員"},
+    )
+    other_token = client.post(
+        "/api/login", json={"username": "insp99", "password": "pass123"}
+    ).json()["token"]
     other_cases = client.get("/api/cases", headers=auth(other_token)).json()
-    assert all(c["inspector_username"] == "insp02" for c in other_cases)
+    assert other_cases == []  # brand-new inspector sees none of insp01's cases
     assert not any(c["ticket_no"] == "Q7036002A121045" for c in other_cases)

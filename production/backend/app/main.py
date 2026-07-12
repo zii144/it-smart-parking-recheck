@@ -247,6 +247,28 @@ def _enforce_login_throttle(keys: list[str]) -> None:
         )
 
 
+def require_active_inspector(
+    principal: Principal = Depends(require_inspector),
+    db: Session = Depends(get_db),
+) -> Principal:
+    """Inspector guard that also enforces the account is *still* allowed to
+    inspect (稽查權限).
+
+    `require_inspector` only proves a valid inspector-role token. Whether the
+    account currently has permission lives in the DB (has_permission) and can be
+    revoked by a sysadmin at any time, so it must be re-checked here on every
+    request — not merely hidden in the UI. Without this, an inspector created
+    without permission (or whose permission was revoked) could still drive the
+    whole inspection API directly with a valid token. Enforced server-side, a
+    revoked account is stopped immediately, matching the design's login-time
+    「無稽查權限則…中止」 rule.
+    """
+    row = db.scalar(select(Inspector).where(Inspector.username == principal.username))
+    if row is None or not row.has_permission:
+        raise HTTPException(status_code=403, detail="無稽查權限")
+    return principal
+
+
 @app.post("/api/login")
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     keys = _login_keys(payload.username, request)
@@ -277,7 +299,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 @app.get("/api/locations")
 def get_locations(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_inspector),
+    principal: Principal = Depends(require_active_inspector),
 ):
     rows = db.execute(
         select(Location.district, Location.road, Location.spot_no).order_by(
@@ -304,7 +326,7 @@ def get_locations(
 # QR scan -> resolve ticket data from the (external) query site
 # --------------------------------------------------------------------------
 @app.post("/api/qr/scan")
-def scan_qr(payload: dict, principal: Principal = Depends(require_inspector)):
+def scan_qr(payload: dict, principal: Principal = Depends(require_active_inspector)):
     """Resolve a scanned QR code into ticket data.
 
     `qr_code` is the raw decoded QR content: either a built-in demo code
@@ -391,7 +413,7 @@ def _run_judgement(db: Session, ticket_no: str, parking_date_str: str, parking_s
 def preview_case(
     payload: CasePreviewRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_inspector),
+    principal: Principal = Depends(require_active_inspector),
 ):
     judgement, error = _run_judgement(
         db, payload.ticket_no, payload.parking_date, payload.parking_start
@@ -408,7 +430,7 @@ def preview_case(
 def create_case(
     payload: CaseCreateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_inspector),
+    principal: Principal = Depends(require_active_inspector),
 ):
     judgement, error = _run_judgement(
         db, payload.ticket_no, payload.parking_date, payload.parking_start
@@ -503,7 +525,7 @@ def create_case(
 @app.get("/api/cases")
 def list_cases(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_inspector),
+    principal: Principal = Depends(require_active_inspector),
 ):
     # Scoped to the authenticated inspector's own submissions - the caller can
     # no longer read another inspector's cases by passing ?username=.
@@ -853,6 +875,21 @@ CSV_HEADER_NOTES = [
 ]
 
 
+# Excel/LibreOffice treat a cell beginning with =, +, -, @ (or a leading tab /
+# carriage return) as a formula. Ticket/plate/location/name values are
+# user-supplied, so a crafted value like `=cmd|...` would execute when a
+# reviewer opens the export. Prefixing such cells with a single quote makes the
+# spreadsheet render them as literal text (CSV/formula-injection guard).
+_CSV_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value) -> str:
+    s = "" if value is None else str(value)
+    if s[:1] in _CSV_FORMULA_TRIGGERS:
+        return "'" + s
+    return s
+
+
 def _split_ticket_no(ticket_no: str):
     """Split a ticket number into the sheet's barcode columns:
     (日期 = Q+月+日, 調查員 = 開單員編號, 時間 = HHMM, 秒 = SS).
@@ -906,7 +943,7 @@ def admin_export_csv(
     writer.writerow(CSV_HEADER_NOTES)
     for c in rows:
         g, h, i, j = _split_ticket_no(c.ticket_no)
-        writer.writerow([
+        writer.writerow([_csv_safe(v) for v in (
             _inspection_date(c.created_at),                          # A 日期
             _inspection_time(c.created_at),                          # B 檢查時間
             name_by_username.get(c.inspector_username, c.inspector_username),  # C 調查員
@@ -917,7 +954,7 @@ def admin_export_csv(
             "",                                                      # K 可不用 (保留)
             "",                                                      # L 費率 (未蒐集)
             "",                                                      # M 其他 (保留)
-        ])
+        )])
     buf.seek(0)
 
     # Prepend a UTF-8 BOM so Excel opens the Chinese headers correctly.
