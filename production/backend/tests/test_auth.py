@@ -94,3 +94,34 @@ def test_sysadmin_cannot_reach_manager_route(client, sysadmin_token):
     # 系統管理員 must not see the review queue / stats / export.
     assert client.get("/api/admin/stats", headers=auth(sysadmin_token)).status_code == 403
     assert client.get("/api/admin/cases", headers=auth(sysadmin_token)).status_code == 403
+
+
+# --- inspection permission enforced server-side (has_permission) -----------
+def test_inspector_without_permission_can_login_but_api_is_blocked(client):
+    # insp02 is seeded with has_permission=0. Login still succeeds (so the app
+    # can show the 無權限 screen), but the token must NOT authorize any
+    # inspector API — enforcement is server-side, not just hidden in the UI.
+    res = client.post("/api/login", json={"username": "insp02", "password": "pass123"})
+    assert res.status_code == 200
+    assert res.json()["inspector"]["has_permission"] is False
+    token = res.json()["token"]
+
+    assert client.get("/api/locations", headers=auth(token)).status_code == 403
+    assert client.get("/api/cases", headers=auth(token)).status_code == 403
+    assert client.post(
+        "/api/qr/scan", headers=auth(token), json={"qr_code": "QR-A1001"}
+    ).status_code == 403
+
+
+def test_revoking_permission_blocks_an_existing_token(client, sysadmin_token, inspector_token):
+    # insp01 starts with a valid, working token...
+    assert client.get("/api/locations", headers=auth(inspector_token)).status_code == 200
+    # ...but the moment a sysadmin revokes permission, that same token stops
+    # working — checked against the DB per request, not just at login time.
+    res = client.patch(
+        "/api/admin/inspectors/insp01",
+        headers=auth(sysadmin_token),
+        json={"has_permission": False},
+    )
+    assert res.status_code == 200
+    assert client.get("/api/locations", headers=auth(inspector_token)).status_code == 403
