@@ -16,6 +16,8 @@ import OfflineBar from "./components/OfflineBar";
 import CaseList from "./components/CaseList";
 import StepBadge from "./components/StepBadge";
 import StepProgress from "./components/StepProgress";
+import DraftSummary from "./components/DraftSummary";
+import { wizardIndex } from "./wizardSteps";
 import { sourceLabel } from "./format";
 
 const STEP_STATE_LABEL = {
@@ -63,6 +65,20 @@ export default function InspectorApp() {
   const [duplicateInfo, setDuplicateInfo] = useState(null);
   const [saveMessage, setSaveMessage] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Furthest wizard step reached for the current case, so the stepper tab bar
+  // can offer jump-back / jump-forward navigation among visited steps while
+  // locking the ones the inspector hasn't unlocked yet.
+  const [maxStep, setMaxStep] = useState(0);
+
+  // Bump the reached watermark whenever the flow advances into a wizard step.
+  useEffect(() => {
+    const idx = wizardIndex(step);
+    if (idx > maxStep) setMaxStep(idx);
+  }, [step, maxStep]);
+
+  function handleJump(key) {
+    if (wizardIndex(key) <= maxStep) setStep(key);
+  }
 
   // Keep a stable ref to the latest sync function so the (mount-once) network
   // listeners can trigger a flush without re-subscribing every render.
@@ -192,6 +208,7 @@ export default function InspectorApp() {
   function startNewCase() {
     setDraft(emptyDraft());
     setSaveMessage(null);
+    setMaxStep(0);
     setStep("qr");
   }
 
@@ -243,9 +260,12 @@ export default function InspectorApp() {
         />
       )}
 
-      <main className={`app-main${step === "list" ? " app-main-wide" : ""}`}>
+      <main
+        className={`app-main${step === "list" ? " app-main-wide" : ""}${
+          wizardIndex(step) !== -1 ? " app-main-workspace" : ""
+        }`}
+      >
         <StepBadge state={STEP_STATE_LABEL[step]} />
-        <StepProgress step={step} />
 
         {step === "permission" && (
           <PermissionCheck inspector={inspector} onPassed={() => setStep("list")} />
@@ -255,87 +275,111 @@ export default function InspectorApp() {
           <CaseList inspector={inspector} refreshKey={refreshKey} onNewCase={startNewCase} />
         )}
 
-        {step === "qr" && (
-          <AcquireStep
-            onResult={(res) => {
-              setDraft((d) => ({ ...d, scanResult: res }));
-              setStep("location");
-            }}
-            onManualFallback={() => {
-              setDraft((d) => ({ ...d, scanResult: { status: "scan_failed", dataSource: "MANUAL_FROM_TICKET" } }));
-              setStep("location");
-            }}
-          />
-        )}
-
-        {step === "location" && (
-          <LocationSelect
-            onBack={() => setStep("qr")}
-            onSelected={(loc) => {
-              setDraft((d) => ({ ...d, ...loc }));
-              setStep("confirm");
-            }}
-          />
-        )}
-
-        {step === "confirm" && (
-          <ConfirmForm
-            scanResult={draft.scanResult}
-            onBack={() => setStep("location")}
-            onConfirmed={({ fields, manualCorrected, originalValues }) => {
-              setDraft((d) => ({ ...d, fields, manualCorrected, originalValues }));
-              setStep("judgment");
-            }}
-          />
-        )}
-
-        {step === "judgment" && (
-          <JudgmentBanner
-            fields={draft.fields}
-            onBack={() => setStep("confirm")}
-            onNext={(preview) => {
-              setDraft((d) => ({ ...d, judgmentPreview: preview }));
-              setStep("photo");
-            }}
-          />
-        )}
-
-        {step === "photo" && (
-          <PhotoCapture
-            onBack={() => setStep("judgment")}
-            onNext={({ photo_base64, photo_filename }) => {
-              setDraft((d) => ({ ...d, photo_base64, photo_filename }));
-              setStep("save");
-            }}
-          />
-        )}
-
-        {step === "save" && (
-          <div className="card">
-            <div className="card-icon-heading">
-              <span className="icon-badge">
-                <Save size={18} />
-              </span>
-              <h2>確認儲存</h2>
+        {wizardIndex(step) !== -1 && (
+          <>
+          <div className="case-workspace">
+            {/* Desktop rail: vertical step nav + running draft summary. */}
+            <div className="case-rail">
+              <StepProgress step={step} maxIndex={maxStep} onJump={handleJump} orientation="vertical" />
+              <DraftSummary draft={draft} online={online} />
             </div>
-            <ul className="kv-list">
-              <li><span>地點</span><span>{draft.district} {draft.road} {draft.spot_no}</span></li>
-              <li><span>帳單編號</span><span>{draft.fields.ticket_no}</span></li>
-              <li><span>車牌</span><span>{draft.fields.plate_no}</span></li>
-              <li><span>判定</span><span>{draft.judgmentPreview?.judgement}</span></li>
-              <li><span>資料來源</span><span>{sourceLabel(draft.scanResult.dataSource)}{draft.manualCorrected ? " (稽查員已修正)" : ""}</span></li>
-              <li><span>目前網路狀態</span><span>{online ? "有網路" : "無網路（將離線暫存）"}</span></li>
-            </ul>
-            <div className="button-row">
-              <button className="btn-secondary" onClick={() => setStep("photo")}>
-                <ArrowLeft size={15} /> 返回
-              </button>
-              <button className="btn-primary" disabled={saving} onClick={handleSave}>
-                {saving ? <Loader2 size={15} className="spin-icon" /> : <Save size={15} />}
-                {saving ? "處理中…" : "確認儲存"}
-              </button>
+
+            <div className="case-stage">
+              {step === "qr" && (
+                <AcquireStep
+                  onResult={(res) => {
+                    setDraft((d) => ({ ...d, scanResult: res }));
+                    setStep("location");
+                  }}
+                  onManualFallback={() => {
+                    setDraft((d) => ({ ...d, scanResult: { status: "scan_failed", dataSource: "MANUAL_FROM_TICKET" } }));
+                    setStep("location");
+                  }}
+                />
+              )}
+
+              {step === "location" && (
+                <LocationSelect
+                  initialDistrict={draft.district}
+                  initialRoad={draft.road}
+                  initialSpot={draft.spot_no}
+                  onBack={() => setStep("qr")}
+                  onSelected={(loc) => {
+                    setDraft((d) => ({ ...d, ...loc }));
+                    setStep("confirm");
+                  }}
+                />
+              )}
+
+              {step === "confirm" && (
+                <ConfirmForm
+                  scanResult={draft.scanResult}
+                  savedFields={draft.fields}
+                  onBack={() => setStep("location")}
+                  onConfirmed={({ fields, manualCorrected, originalValues }) => {
+                    setDraft((d) => ({ ...d, fields, manualCorrected, originalValues }));
+                    setStep("judgment");
+                  }}
+                />
+              )}
+
+              {step === "judgment" && (
+                <JudgmentBanner
+                  fields={draft.fields}
+                  onBack={() => setStep("confirm")}
+                  onNext={(preview) => {
+                    setDraft((d) => ({ ...d, judgmentPreview: preview }));
+                    setStep("photo");
+                  }}
+                />
+              )}
+
+              {step === "photo" && (
+                <PhotoCapture
+                  initialBase64={draft.photo_base64}
+                  initialFilename={draft.photo_filename}
+                  onBack={() => setStep("judgment")}
+                  onNext={({ photo_base64, photo_filename }) => {
+                    setDraft((d) => ({ ...d, photo_base64, photo_filename }));
+                    setStep("save");
+                  }}
+                />
+              )}
+
+              {step === "save" && (
+                <div className="card">
+                  <div className="card-icon-heading">
+                    <span className="icon-badge">
+                      <Save size={18} />
+                    </span>
+                    <h2>確認儲存</h2>
+                  </div>
+                  <ul className="kv-list">
+                    <li><span>地點</span><span>{draft.district} {draft.road} {draft.spot_no}</span></li>
+                    <li><span>帳單編號</span><span>{draft.fields.ticket_no}</span></li>
+                    <li><span>車牌</span><span>{draft.fields.plate_no}</span></li>
+                    <li><span>判定</span><span>{draft.judgmentPreview?.judgement}</span></li>
+                    <li><span>資料來源</span><span>{sourceLabel(draft.scanResult.dataSource)}{draft.manualCorrected ? " (稽查員已修正)" : ""}</span></li>
+                    <li><span>目前網路狀態</span><span>{online ? "有網路" : "無網路（將離線暫存）"}</span></li>
+                  </ul>
+                  <div className="button-row">
+                    <button className="btn-secondary" onClick={() => setStep("photo")}>
+                      <ArrowLeft size={15} /> 返回
+                    </button>
+                    <button className="btn-primary" disabled={saving} onClick={handleSave}>
+                      {saving ? <Loader2 size={15} className="spin-icon" /> : <Save size={15} />}
+                      {saving ? "處理中…" : "確認儲存"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Mobile: fixed bottom step tab bar (hidden on desktop, where the
+              vertical rail takes over). Tap a reached step to jump. */}
+          <StepProgress step={step} maxIndex={maxStep} onJump={handleJump} orientation="bottom" />
+          </>
         )}
 
         {step === "done" && (

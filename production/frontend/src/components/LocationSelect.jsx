@@ -4,24 +4,28 @@ import { api } from "../api";
 import Spinner from "./Spinner";
 import SearchableSelect from "./SearchableSelect";
 
-export default function LocationSelect({ onSelected, onBack }) {
+export default function LocationSelect({ onSelected, onBack, initialDistrict = null, initialRoad = null, initialSpot = null }) {
   const [districts, setDistricts] = useState([]);
   // Track selections by name (not array index) so they stay valid as the
-  // seeded location data grows or is reordered.
-  const [districtName, setDistrictName] = useState("");
-  const [roadName, setRoadName] = useState("");
-  const [spot, setSpot] = useState("");
+  // seeded location data grows or is reordered. Seed from any already-picked
+  // values on the draft so jumping back to 地點 keeps the selection.
+  const [districtName, setDistrictName] = useState(initialDistrict ?? "");
+  const [roadName, setRoadName] = useState(initialRoad ?? "");
+  const [spot, setSpot] = useState(initialSpot ?? "");
   const [gps, setGps] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api.getLocations().then((res) => {
       setDistricts(res.districts);
-      const d0 = res.districts[0];
-      const r0 = d0?.roads[0];
-      setDistrictName(d0?.district ?? "");
-      setRoadName(r0?.road ?? "");
-      setSpot(r0?.spots[0] ?? "");
+      // Only fall back to the first options when nothing was pre-selected.
+      if (!initialDistrict) {
+        const d0 = res.districts[0];
+        const r0 = d0?.roads[0];
+        setDistrictName(d0?.district ?? "");
+        setRoadName(r0?.road ?? "");
+        setSpot(r0?.spots[0] ?? "");
+      }
       setLoading(false);
     });
 
@@ -43,6 +47,8 @@ export default function LocationSelect({ onSelected, onBack }) {
     } else {
       setGps(demoCoords());
     }
+    // Mount-once: initialDistrict is only the seed value for the first render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const district = useMemo(
