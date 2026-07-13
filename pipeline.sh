@@ -225,9 +225,13 @@ try:
     row = db.scalar(select(AdminUser).where(AdminUser.username == u))
     if row:
         row.password = hash_password(p); row.display_name = d; row.role = r
+        row.is_active = 1  # a manual reset always re-enables the account
         action = "updated"
     else:
-        db.add(AdminUser(username=u, password=hash_password(p), display_name=d, role=r))
+        db.add(AdminUser(
+            username=u, password=hash_password(p), display_name=d, role=r,
+            is_active=1, created_by="cli",
+        ))
         action = "created"
     db.commit()
     print(f"admin {action}: {u} ({r})")

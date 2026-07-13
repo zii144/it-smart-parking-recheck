@@ -117,6 +117,26 @@ class Settings:
         # (default system settings are seeded regardless of this flag).
         self.seed_demo_data: bool = _env_bool("SEED_DEMO_DATA", True)
 
+        # Minimum password length enforced when the admin console creates or
+        # updates an *admin* account (managers/sysadmins). Kept off the inspector
+        # endpoints so existing field-worker credentials aren't invalidated.
+        self.admin_password_min_length: int = int(
+            os.environ.get("ADMIN_PASSWORD_MIN_LENGTH", "8")
+        )
+
+        # Bootstrap sysadmin. Because production runs with SEED_DEMO_DATA=false,
+        # no admin account exists on a fresh deploy and there'd be no way to log
+        # into the console. If these are set, the first sysadmin is created from
+        # the environment (idempotently, only when that username is absent) — no
+        # hard-coded credential ever lives in the source tree.
+        self.bootstrap_admin_username: str = os.environ.get(
+            "BOOTSTRAP_ADMIN_USERNAME", ""
+        ).strip()
+        self.bootstrap_admin_password: str = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "")
+        self.bootstrap_admin_display_name: str = os.environ.get(
+            "BOOTSTRAP_ADMIN_DISPLAY_NAME", "系統管理員"
+        ).strip()
+
     @property
     def is_production(self) -> bool:
         return self.app_env in ("production", "prod")

@@ -432,6 +432,100 @@
   margin-left: auto;
 }
 
+/* ---------- Accounts console (稽查員 / 管理帳號 sub-tabs) ---------- */
+
+.subtabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-pill);
+}
+
+.subtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.subtab:hover {
+  color: var(--color-ink);
+}
+
+.subtab.active {
+  color: #fff;
+  background: var(--color-panel);
+}
+
+/* Row action buttons sit in a compact, wrapping cluster. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.row-actions .btn-secondary,
+.row-actions .btn-danger {
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+
+/* Inline editor revealed when 編輯 is clicked on an account row. */
+.row-editing {
+  background: var(--color-primary-light);
+}
+
+.row-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.row-editor input,
+.row-editor select {
+  width: auto;
+  min-width: 150px;
+  margin: 0;
+}
+
+.row-editor .btn-primary,
+.row-editor .btn-secondary {
+  padding: 8px 12px;
+}
+
+.inline-error {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-danger);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* "you" marker on the currently logged-in admin's own row. */
+.self-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-panel);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
 /* ---------- Inline forms (accounts / locations) ---------- */
 
 .inline-form {

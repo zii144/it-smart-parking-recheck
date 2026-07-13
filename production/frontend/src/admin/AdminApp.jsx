@@ -84,7 +84,7 @@ export default function AdminApp() {
         {activeTab === "queue" && <ReviewQueue adminUsername={admin.username} />}
         {activeTab === "search" && <CaseSearch adminUsername={admin.username} />}
         {activeTab === "stats" && <StatsDashboard />}
-        {activeTab === "accounts" && <AccountsManager />}
+        {activeTab === "accounts" && <AccountsManager admin={admin} />}
         {activeTab === "locations" && <LocationsManager />}
         {activeTab === "settings" && <SettingsPanel />}
       </main>
