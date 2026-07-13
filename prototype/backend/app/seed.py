@@ -92,6 +92,11 @@ QR_DEMO_CODES = {
         "parking_date": "2026-07-02",
         "parking_start": "2026-07-02T09:10:00",
         "parking_end": "2026-07-02T10:10:00",
+        # Same location as the pre-seeded duplicate case, so the DUPLICATE demo
+        # collides on location too, not just on ticket_no.
+        "district": "中正區",
+        "road": "信義路",
+        "spot_no": "A-012",
         "note": "COMPLIANT judgement, and collides with the pre-seeded case below (DUPLICATE demo).",
     },
     "QR-A1002": {
@@ -103,6 +108,9 @@ QR_DEMO_CODES = {
         "parking_date": "2026-07-02",
         "parking_start": "2026-07-02T08:50:00",
         "parking_end": "2026-07-02T09:50:00",
+        "district": "大安區",
+        "road": "敦化南路",
+        "spot_no": "C-101",
         "note": "OVERDUE judgement demo (~85 min gap).",
     },
     "QR-A1003": {
@@ -114,6 +122,10 @@ QR_DEMO_CODES = {
         "parking_date": "2026-07-01",
         "parking_start": "2026-07-01T09:00:00",
         "parking_end": "2026-07-01T10:00:00",
+        # Location as printed on the real 內湖區 sample ticket (target-sample/).
+        "district": "內湖區",
+        "road": "成功路5段450巷22弄",
+        "spot_no": "0020",
         "note": "DATA_ERROR demo: ticket issue time (08:00) is before parking start (09:00).",
     },
     "QR-A1004": {
@@ -125,6 +137,10 @@ QR_DEMO_CODES = {
         "parking_date": "2026-07-03",
         "parking_start": "2026-07-03T11:40:00",
         "parking_end": "2026-07-03T12:40:00",
+        # Location as printed on the real 松山區 sample ticket (target-sample/).
+        "district": "松山區",
+        "road": "民生東路4段80巷",
+        "spot_no": "05",
         "note": "Clean COMPLIANT demo, no duplicate.",
     },
     "QR-A1005": {
@@ -137,7 +153,10 @@ QR_DEMO_CODES = {
             "繳費期限：2026-07-25\n"
             "停車日期：2026-07-03\n"
             "停車開始時間：13:30\n"
-            "停車結束時間：14:30"
+            "停車結束時間：14:30\n"
+            "行政區：南港區\n"
+            "停車地點：舊莊街1段\n"
+            "車位編號：30"
         ),
         "note": "Simulates the QR decoding fine but the page failing to load; inspector reads page_preview and fills the form (MANUAL_FROM_QR_PAGE).",
     },

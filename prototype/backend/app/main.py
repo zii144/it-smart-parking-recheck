@@ -349,6 +349,9 @@ _MOCK_LABELS = [
     ("parking_date", "停車日期"),
     ("parking_start", "停車開始時間"),
     ("parking_end", "停車結束時間"),
+    ("district", "行政區"),
+    ("road", "停車地點"),
+    ("spot_no", "車位編號"),
 ]
 
 
