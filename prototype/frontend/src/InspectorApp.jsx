@@ -288,7 +288,17 @@ export default function InspectorApp() {
               {step === "qr" && (
                 <AcquireStep
                   onResult={(res) => {
-                    setDraft((d) => ({ ...d, scanResult: res }));
+                    // Location extracted from the ticket data (QR query page /
+                    // OCR of the paper ticket) pre-fills the 選擇稽查地點 step;
+                    // anything missing stays as-is for the inspector to pick.
+                    const t = res.ticket || {};
+                    setDraft((d) => ({
+                      ...d,
+                      scanResult: res,
+                      district: t.district || d.district,
+                      road: t.road || d.road,
+                      spot_no: t.spot_no || d.spot_no,
+                    }));
                     setStep("location");
                   }}
                   onManualFallback={() => {
@@ -303,6 +313,11 @@ export default function InspectorApp() {
                   initialDistrict={draft.district}
                   initialRoad={draft.road}
                   initialSpot={draft.spot_no}
+                  prefilledFromTicket={Boolean(
+                    draft.scanResult?.ticket?.district ||
+                      draft.scanResult?.ticket?.road ||
+                      draft.scanResult?.ticket?.spot_no
+                  )}
                   onBack={() => setStep("qr")}
                   onSelected={(loc) => {
                     setDraft((d) => ({ ...d, ...loc }));
