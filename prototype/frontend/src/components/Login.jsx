@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ParkingCircle, AlertCircle, LogIn, Loader2 } from "lucide-react";
-import { api, ApiError } from "../api";
+import { api, loginErrorMessage } from "../api";
 
 export default function Login({ onLoggedIn }) {
   const [username, setUsername] = useState("insp01");
@@ -16,11 +16,7 @@ export default function Login({ onLoggedIn }) {
       const res = await api.login(username, password);
       onLoggedIn(res.inspector, res.token);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setError("帳號或密碼錯誤");
-      } else {
-        setError("無法連線到後端 API，請確認後端服務已啟動 (http://localhost:8000)");
-      }
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }

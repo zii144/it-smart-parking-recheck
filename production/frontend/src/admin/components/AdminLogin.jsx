@@ -3,8 +3,8 @@ import { ShieldHalf, AlertCircle, LogIn, Loader2, ParkingCircle } from "lucide-r
 import { adminApi, ApiError } from "../../api";
 
 export default function AdminLogin({ onLoggedIn }) {
-  const [username, setUsername] = useState("manager01");
-  const [password, setPassword] = useState("manager123");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 

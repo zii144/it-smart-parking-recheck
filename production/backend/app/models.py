@@ -41,6 +41,15 @@ class AdminUser(Base):
     #   "manager"  (管理人員)   -> review queue, case search, stats, export
     #   "sysadmin" (系統管理員) -> inspector accounts, locations, system settings
     role: Mapped[str] = mapped_column(String(16), nullable=False, server_default="sysadmin")
+    # Soft-disable an admin without deleting the row (keeps historical
+    # `cases.reviewed_by` references intact). A disabled admin cannot log in and
+    # any still-valid token is rejected per request, mirroring the inspector's
+    # `has_permission` revocation behaviour.
+    is_active: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
+    # Lightweight audit trail for the management console: when the account was
+    # created and by whom ("bootstrap"/"system"/another admin's username).
+    created_at: Mapped[str | None] = mapped_column(String(32))
+    created_by: Mapped[str | None] = mapped_column(String(64))
 
 
 class Setting(Base):

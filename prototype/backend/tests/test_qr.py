@@ -26,6 +26,23 @@ HTML_TICKET = (
     "</body></html>"
 )
 
+# A page that also carries the location fields, using the labels printed on the
+# paper ticket (區組/停車地點/車位編號) rather than the app's own wording.
+HTML_TICKET_WITH_LOCATION = (
+    "<html><body>"
+    "<p>帳單編號：Q7036002A121045</p>"
+    "<p>車牌號碼：GHI-3456</p>"
+    "<p>應繳金額：900</p>"
+    "<p>繳費期限：2026-07-24</p>"
+    "<p>停車日期：2026-07-03</p>"
+    "<p>停車開始時間：11:40</p>"
+    "<p>停車結束時間：12:40</p>"
+    "<p>區組：松山區</p>"
+    "<p>停車地點：民生東路4段80巷</p>"
+    "<p>車位編號：05</p>"
+    "</body></html>"
+)
+
 
 def _enable_real_fetch(monkeypatch, host="qr.example.gov.tw"):
     s = get_settings()
@@ -49,6 +66,16 @@ def test_demo_success_code():
     assert res["ticket"]["ticket_no"] == "Q7036002A121045"
     # Internal metadata must not leak into the ticket payload.
     assert "type" not in res["ticket"] and "note" not in res["ticket"]
+
+
+def test_demo_ticket_carries_location():
+    # Location rides along in the ticket payload so the frontend can pre-fill
+    # the 選擇稽查地點 step instead of defaulting to a hard-coded picklist entry.
+    res = qr_service.resolve("QR-A1003")
+    assert res["status"] == "success"
+    assert res["ticket"]["district"] == "內湖區"
+    assert res["ticket"]["road"] == "成功路5段450巷22弄"
+    assert res["ticket"]["spot_no"] == "0020"
 
 
 def test_demo_fetch_failed_code():
@@ -105,6 +132,40 @@ def test_real_fetch_labeled_html_combines_time(monkeypatch):
     # Time-only "11:40" + date -> ISO datetime the judgement step expects.
     assert res["ticket"]["parking_start"] == "2026-07-03T11:40:00"
     assert res["ticket"]["parking_end"] == "2026-07-03T12:40:00"
+
+
+def test_real_fetch_html_extracts_location_labels(monkeypatch):
+    host = _enable_real_fetch(monkeypatch)
+    monkeypatch.setattr(qr_service, "fetch_url", _fake_fetch(HTML_TICKET_WITH_LOCATION))
+    res = qr_service.resolve(f"https://{host}/t/abc")
+    assert res["status"] == "success"
+    # 區組 is accepted as an alternate label for 行政區.
+    assert res["ticket"]["district"] == "松山區"
+    assert res["ticket"]["road"] == "民生東路4段80巷"
+    assert res["ticket"]["spot_no"] == "05"
+
+
+def test_real_fetch_html_without_location_still_succeeds(monkeypatch):
+    # Location fields are optional extras: the taipei fee-query chain never
+    # provides them, and their absence must not fail the resolution.
+    host = _enable_real_fetch(monkeypatch)
+    monkeypatch.setattr(qr_service, "fetch_url", _fake_fetch(HTML_TICKET))
+    res = qr_service.resolve(f"https://{host}/t/abc")
+    assert res["status"] == "success"
+    assert "district" not in res["ticket"]
+
+
+def test_real_fetch_json_with_location(monkeypatch):
+    host = _enable_real_fetch(monkeypatch)
+    json_ticket = JSON_TICKET.rstrip("}") + ', "district": "松山區", "road": "民生東路4段80巷", "spot_no": "05"}'
+    monkeypatch.setattr(
+        qr_service, "fetch_url", _fake_fetch(json_ticket, content_type="application/json")
+    )
+    res = qr_service.resolve(f"https://{host}/t/abc")
+    assert res["status"] == "success"
+    assert res["ticket"]["district"] == "松山區"
+    assert res["ticket"]["road"] == "民生東路4段80巷"
+    assert res["ticket"]["spot_no"] == "05"
 
 
 def test_real_fetch_unparseable_page_is_fetch_failed(monkeypatch):
@@ -186,6 +247,10 @@ def test_mock_site_serves_ticket_page(client):
     assert res.status_code == 200
     assert "帳單編號" in res.text
     assert "Q7036002A121045" in res.text
+    # The mock page also publishes the location, so scanning a QR that points
+    # at it round-trips 行政區/停車地點/車位編號 into the ticket payload.
+    assert "松山區" in res.text
+    assert "民生東路4段80巷" in res.text
 
 
 def test_mock_site_unknown_token_404(client):

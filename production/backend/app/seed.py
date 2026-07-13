@@ -11,9 +11,10 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from . import business_rules as rules
+from .config import get_settings
 from .db import SessionLocal, get_setting, set_setting
 from .models import AdminUser, Case, Inspector, Location
-from .security import hash_password
+from .security import ROLE_SYSADMIN, hash_password
 
 # --- Inspector accounts -----------------------------------------------------
 # insp01 has inspection permission; insp02 does not (demoes the "無權限" branch).
@@ -146,6 +147,36 @@ QR_DEMO_CODES = {
 # any code not in QR_DEMO_CODES (e.g. "QR-BAD-SCAN") is treated as a scan failure.
 
 
+def _ensure_bootstrap_admin(db) -> None:
+    """Create the first sysadmin from the environment if configured and absent.
+
+    Production runs with SEED_DEMO_DATA=false, so none of the DEMO_ADMINS are
+    created and there'd be no way to sign into the console on a fresh deploy.
+    Setting BOOTSTRAP_ADMIN_USERNAME / BOOTSTRAP_ADMIN_PASSWORD provisions one
+    sysadmin from env vars instead — no credential is hard-coded in the source
+    tree, and it's idempotent (only created when that username doesn't exist).
+    Once the real admins are created through the UI, the env vars can be dropped.
+    """
+    s = get_settings()
+    if not s.bootstrap_admin_username or not s.bootstrap_admin_password:
+        return
+    if db.scalar(
+        select(AdminUser).where(AdminUser.username == s.bootstrap_admin_username)
+    ) is not None:
+        return
+    db.add(
+        AdminUser(
+            username=s.bootstrap_admin_username,
+            password=hash_password(s.bootstrap_admin_password),
+            display_name=s.bootstrap_admin_display_name or s.bootstrap_admin_username,
+            role=ROLE_SYSADMIN,
+            is_active=1,
+            created_at=datetime.now().isoformat(timespec="seconds"),
+            created_by="bootstrap",
+        )
+    )
+
+
 def seed(force: bool = False, demo: bool = True) -> None:
     """Idempotently populate the database. Passwords are bcrypt-hashed on
     insert, so no plaintext credential is ever written to the database.
@@ -161,6 +192,11 @@ def seed(force: bool = False, demo: bool = True) -> None:
         for key, value in DEFAULT_SETTINGS.items():
             if get_setting(db, key) is None:
                 set_setting(db, key, value)
+
+        # Provision the env-configured bootstrap sysadmin in every environment
+        # (including production, where demo seeding is off) so a fresh deploy is
+        # never left with no way to log into the console.
+        _ensure_bootstrap_admin(db)
 
         if not demo:
             db.commit()
@@ -190,6 +226,9 @@ def seed(force: bool = False, demo: bool = True) -> None:
                         password=hash_password(admin["password"]),
                         display_name=admin["display_name"],
                         role=admin["role"],
+                        is_active=1,
+                        created_at=datetime.now().isoformat(timespec="seconds"),
+                        created_by="system",
                     )
                 )
 

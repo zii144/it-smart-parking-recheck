@@ -34,6 +34,10 @@ Endpoints:
   GET  /api/admin/inspectors          - list inspector accounts [sysadmin]
   POST /api/admin/inspectors          - create an inspector account [sysadmin]
   PATCH /api/admin/inspectors/{username} - update permission/name/password [sysadmin]
+  GET  /api/admin/admins              - list admin (manager/sysadmin) accounts [sysadmin]
+  POST /api/admin/admins              - create an admin account [sysadmin]
+  PATCH /api/admin/admins/{username}  - update name/role/password/active [sysadmin]
+  DELETE /api/admin/admins/{username} - delete an admin account [sysadmin]
   GET  /api/admin/locations           - flat list of parking spots [sysadmin]
   POST /api/admin/locations           - add a parking spot [sysadmin]
   DELETE /api/admin/locations/{id}    - remove a parking spot [sysadmin]
@@ -66,7 +70,9 @@ from .media import validate_photo
 from .db import get_db, get_setting, init_db, set_setting
 from .models import AdminUser, Case, Inspector, Location, row_to_dict
 from .security import (
+    ADMIN_ROLES,
     ROLE_INSPECTOR,
+    ROLE_SYSADMIN,
     Principal,
     create_access_token,
     hash_password,
@@ -206,6 +212,21 @@ class InspectorUpdateRequest(BaseModel):
     password: Optional[str] = None
 
 
+class AdminCreateRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str
+    role: str  # manager | sysadmin
+
+
+class AdminUpdateRequest(BaseModel):
+    # PATCH semantics: only the provided fields change.
+    display_name: Optional[str] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
 class LocationCreateRequest(BaseModel):
     district: str
     road: str
@@ -267,6 +288,36 @@ def require_active_inspector(
     if row is None or not row.has_permission:
         raise HTTPException(status_code=403, detail="無稽查權限")
     return principal
+
+
+def _require_active_admin(principal: Principal, db: Session) -> Principal:
+    """Reject a valid admin token whose account was disabled or deleted after
+    the token was issued.
+
+    The role guards only prove the token *claims* a manager/sysadmin role. Just
+    like `require_active_inspector`, whether the account is *still* usable lives
+    in the DB (`is_active`) and can be revoked by another sysadmin at any time,
+    so it's re-checked per request rather than trusted for the token's whole
+    12-hour lifetime.
+    """
+    row = db.scalar(select(AdminUser).where(AdminUser.username == principal.username))
+    if row is None or not row.is_active or row.role != principal.role:
+        raise HTTPException(status_code=403, detail="帳號已停用或不存在")
+    return principal
+
+
+def require_active_manager(
+    principal: Principal = Depends(require_manager),
+    db: Session = Depends(get_db),
+) -> Principal:
+    return _require_active_admin(principal, db)
+
+
+def require_active_sysadmin(
+    principal: Principal = Depends(require_sysadmin),
+    db: Session = Depends(get_db),
+) -> Principal:
+    return _require_active_admin(principal, db)
 
 
 @app.post("/api/login")
@@ -349,6 +400,9 @@ _MOCK_LABELS = [
     ("parking_date", "停車日期"),
     ("parking_start", "停車開始時間"),
     ("parking_end", "停車結束時間"),
+    ("district", "行政區"),
+    ("road", "停車地點"),
+    ("spot_no", "車位編號"),
 ]
 
 
@@ -561,8 +615,14 @@ def admin_login(payload: AdminLoginRequest, request: Request, db: Session = Depe
             login_throttle.record_failure(k)
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
 
+    # A disabled admin authenticates correctly but must not receive a token.
+    # Reset the throttle first (the credential *was* right, so this isn't a
+    # brute-force attempt to penalise) before refusing on the active check.
     for k in keys:
         login_throttle.reset(k)
+    if not row.is_active:
+        raise HTTPException(status_code=403, detail="此帳號已停用，請聯絡系統管理員")
+
     return {
         "token": create_access_token(row.username, row.role),
         "admin": {
@@ -584,7 +644,7 @@ def admin_list_cases(
     date: Optional[str] = None,  # YYYY-MM-DD, matches created_at day
     q: Optional[str] = None,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_manager),
+    principal: Principal = Depends(require_active_manager),
 ):
     stmt = select(Case)
 
@@ -619,7 +679,7 @@ def admin_list_cases(
 def admin_get_case(
     case_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_manager),
+    principal: Principal = Depends(require_active_manager),
 ):
     row = db.get(Case, case_id)
     if not row:
@@ -632,7 +692,7 @@ def admin_review_case(
     case_id: int,
     payload: ReviewRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_manager),
+    principal: Principal = Depends(require_active_manager),
 ):
     if payload.outcome not in REVIEW_OUTCOMES:
         raise HTTPException(status_code=400, detail=f"未知的複核結果：{payload.outcome}")
@@ -674,7 +734,7 @@ def admin_update_case(
     case_id: int,
     payload: AdminCaseUpdateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_manager),
+    principal: Principal = Depends(require_active_manager),
 ):
     case = db.get(Case, case_id)
     if not case:
@@ -724,7 +784,7 @@ def admin_update_case(
 def admin_delete_case(
     case_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_manager),
+    principal: Principal = Depends(require_active_manager),
 ):
     case = db.get(Case, case_id)
     if not case:
@@ -745,7 +805,7 @@ def admin_delete_case(
 @app.get("/api/admin/stats")
 def admin_stats(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_manager),
+    principal: Principal = Depends(require_active_manager),
 ):
     total = db.scalar(select(func.count()).select_from(Case)) or 0
 
@@ -930,7 +990,7 @@ def _inspection_time(created_at: str) -> str:
 @app.get("/api/admin/export.csv")
 def admin_export_csv(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_manager),
+    principal: Principal = Depends(require_active_manager),
 ):
     rows = db.scalars(select(Case).order_by(Case.id)).all()
     name_by_username = {
@@ -968,7 +1028,7 @@ def admin_export_csv(
 @app.get("/api/admin/inspectors")
 def admin_list_inspectors(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_sysadmin),
+    principal: Principal = Depends(require_active_sysadmin),
 ):
     rows = db.scalars(select(Inspector).order_by(Inspector.username)).all()
     # Never expose the password hash.
@@ -986,7 +1046,7 @@ def admin_list_inspectors(
 def admin_create_inspector(
     payload: InspectorCreateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_sysadmin),
+    principal: Principal = Depends(require_active_sysadmin),
 ):
     existing = db.scalar(select(Inspector).where(Inspector.username == payload.username))
     if existing:
@@ -1012,7 +1072,7 @@ def admin_update_inspector(
     username: str,
     payload: InspectorUpdateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_sysadmin),
+    principal: Principal = Depends(require_active_sysadmin),
 ):
     row = db.scalar(select(Inspector).where(Inspector.username == username))
     if not row:
@@ -1034,10 +1094,173 @@ def admin_update_inspector(
     }
 
 
+# --------------------------------------------------------------------------
+# Admin accounts (管理帳號): create/list/edit/disable/delete managers &
+# sysadmins. Gated to sysadmin only — a manager can review cases but must not
+# be able to mint new privileged accounts.
+# --------------------------------------------------------------------------
+def _serialize_admin(row: AdminUser) -> dict:
+    # Never expose the password hash.
+    return {
+        "username": row.username,
+        "display_name": row.display_name,
+        "role": row.role,
+        "is_active": bool(row.is_active),
+        "created_at": row.created_at,
+        "created_by": row.created_by,
+    }
+
+
+def _validate_admin_role(role: str) -> str:
+    role = (role or "").strip()
+    if role not in ADMIN_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail="角色必須為 manager 或 sysadmin",
+        )
+    return role
+
+
+def _validate_admin_password(password: str) -> None:
+    if len(password or "") < settings.admin_password_min_length:
+        raise HTTPException(
+            status_code=400,
+            detail=f"密碼長度至少需 {settings.admin_password_min_length} 個字元",
+        )
+
+
+def _active_sysadmin_count(db: Session, *, exclude_username: str | None = None) -> int:
+    """How many *other* enabled sysadmins exist — the guard rail that stops the
+    console from removing the last route back into itself (self-lockout)."""
+    stmt = select(func.count()).select_from(AdminUser).where(
+        AdminUser.role == ROLE_SYSADMIN,
+        AdminUser.is_active == 1,
+    )
+    if exclude_username is not None:
+        stmt = stmt.where(AdminUser.username != exclude_username)
+    return db.scalar(stmt) or 0
+
+
+@app.get("/api/admin/admins")
+def admin_list_admins(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    rows = db.scalars(select(AdminUser).order_by(AdminUser.username)).all()
+    return [_serialize_admin(r) for r in rows]
+
+
+@app.post("/api/admin/admins")
+def admin_create_admin(
+    payload: AdminCreateRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    username = payload.username.strip()
+    display_name = payload.display_name.strip()
+    if not username or not display_name:
+        raise HTTPException(status_code=400, detail="帳號與姓名不可為空")
+    role = _validate_admin_role(payload.role)
+    _validate_admin_password(payload.password)
+
+    if db.scalar(select(AdminUser).where(AdminUser.username == username)):
+        raise HTTPException(status_code=409, detail="帳號已存在")
+
+    row = AdminUser(
+        username=username,
+        password=hash_password(payload.password),
+        display_name=display_name,
+        role=role,
+        is_active=1,
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        created_by=principal.username,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _serialize_admin(row)
+
+
+@app.patch("/api/admin/admins/{username}")
+def admin_update_admin(
+    username: str,
+    payload: AdminUpdateRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    row = db.scalar(select(AdminUser).where(AdminUser.username == username))
+    if not row:
+        raise HTTPException(status_code=404, detail="帳號不存在")
+
+    # Compute the account's state *after* this patch so the last-sysadmin guard
+    # sees the intended result, not the current one.
+    new_role = _validate_admin_role(payload.role) if payload.role is not None else row.role
+    new_active = payload.is_active if payload.is_active is not None else bool(row.is_active)
+
+    # Last-sysadmin guard: never let a change (disable or demote to manager)
+    # leave the system with zero enabled sysadmins. Because the count excludes
+    # the row being edited, this is also what stops the *sole* sysadmin from
+    # disabling or demoting themselves and locking everyone out — while still
+    # letting one of several sysadmins step down.
+    was_active_sysadmin = row.role == ROLE_SYSADMIN and bool(row.is_active)
+    still_active_sysadmin = new_role == ROLE_SYSADMIN and new_active
+    if was_active_sysadmin and not still_active_sysadmin:
+        if _active_sysadmin_count(db, exclude_username=row.username) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="系統中必須至少保留一位啟用的系統管理員",
+            )
+
+    if payload.display_name is not None:
+        display_name = payload.display_name.strip()
+        if not display_name:
+            raise HTTPException(status_code=400, detail="姓名不可為空")
+        row.display_name = display_name
+    if payload.role is not None:
+        row.role = new_role
+    if payload.is_active is not None:
+        row.is_active = int(new_active)
+    if payload.password is not None:
+        _validate_admin_password(payload.password)
+        row.password = hash_password(payload.password)
+
+    db.commit()
+    db.refresh(row)
+    return _serialize_admin(row)
+
+
+@app.delete("/api/admin/admins/{username}")
+def admin_delete_admin(
+    username: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    row = db.scalar(select(AdminUser).where(AdminUser.username == username))
+    if not row:
+        raise HTTPException(status_code=404, detail="帳號不存在")
+
+    if row.username == principal.username:
+        raise HTTPException(status_code=400, detail="無法刪除自己的帳號")
+
+    # Deleting an enabled sysadmin is subject to the same last-sysadmin guard as
+    # disabling one. (Disabling is the recommended path — it keeps historical
+    # `reviewed_by` attributions readable — but a hard delete is allowed.)
+    if row.role == ROLE_SYSADMIN and row.is_active:
+        if _active_sysadmin_count(db, exclude_username=row.username) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="系統中必須至少保留一位啟用的系統管理員",
+            )
+
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
 @app.get("/api/admin/locations")
 def admin_list_locations(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_sysadmin),
+    principal: Principal = Depends(require_active_sysadmin),
 ):
     rows = db.scalars(
         select(Location).order_by(Location.district, Location.road, Location.spot_no)
@@ -1049,7 +1272,7 @@ def admin_list_locations(
 def admin_create_location(
     payload: LocationCreateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_sysadmin),
+    principal: Principal = Depends(require_active_sysadmin),
 ):
     existing = db.scalar(
         select(Location).where(
@@ -1076,7 +1299,7 @@ def admin_create_location(
 def admin_delete_location(
     location_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_sysadmin),
+    principal: Principal = Depends(require_active_sysadmin),
 ):
     location = db.get(Location, location_id)
     if location is None:
@@ -1089,7 +1312,7 @@ def admin_delete_location(
 @app.get("/api/admin/settings")
 def admin_get_settings(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_sysadmin),
+    principal: Principal = Depends(require_active_sysadmin),
 ):
     return {"overdue_threshold_minutes": _current_overdue_threshold(db)}
 
@@ -1098,7 +1321,7 @@ def admin_get_settings(
 def admin_update_settings(
     payload: SettingsUpdateRequest,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_sysadmin),
+    principal: Principal = Depends(require_active_sysadmin),
 ):
     if payload.overdue_threshold_minutes <= 0:
         raise HTTPException(status_code=400, detail="門檻必須大於 0")

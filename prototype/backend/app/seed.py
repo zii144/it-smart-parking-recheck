@@ -11,9 +11,10 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from . import business_rules as rules
+from .config import get_settings
 from .db import SessionLocal, get_setting, set_setting
 from .models import AdminUser, Case, Inspector, Location
-from .security import hash_password
+from .security import ROLE_SYSADMIN, hash_password
 
 # --- Inspector accounts -----------------------------------------------------
 # insp01 has inspection permission; insp02 does not (demoes the "無權限" branch).
@@ -92,6 +93,11 @@ QR_DEMO_CODES = {
         "parking_date": "2026-07-02",
         "parking_start": "2026-07-02T09:10:00",
         "parking_end": "2026-07-02T10:10:00",
+        # Same location as the pre-seeded duplicate case, so the DUPLICATE demo
+        # collides on location too, not just on ticket_no.
+        "district": "中正區",
+        "road": "信義路",
+        "spot_no": "A-012",
         "note": "COMPLIANT judgement, and collides with the pre-seeded case below (DUPLICATE demo).",
     },
     "QR-A1002": {
@@ -103,6 +109,9 @@ QR_DEMO_CODES = {
         "parking_date": "2026-07-02",
         "parking_start": "2026-07-02T08:50:00",
         "parking_end": "2026-07-02T09:50:00",
+        "district": "大安區",
+        "road": "敦化南路",
+        "spot_no": "C-101",
         "note": "OVERDUE judgement demo (~85 min gap).",
     },
     "QR-A1003": {
@@ -114,6 +123,10 @@ QR_DEMO_CODES = {
         "parking_date": "2026-07-01",
         "parking_start": "2026-07-01T09:00:00",
         "parking_end": "2026-07-01T10:00:00",
+        # Location as printed on the real 內湖區 sample ticket (target-sample/).
+        "district": "內湖區",
+        "road": "成功路5段450巷22弄",
+        "spot_no": "0020",
         "note": "DATA_ERROR demo: ticket issue time (08:00) is before parking start (09:00).",
     },
     "QR-A1004": {
@@ -125,6 +138,10 @@ QR_DEMO_CODES = {
         "parking_date": "2026-07-03",
         "parking_start": "2026-07-03T11:40:00",
         "parking_end": "2026-07-03T12:40:00",
+        # Location as printed on the real 松山區 sample ticket (target-sample/).
+        "district": "松山區",
+        "road": "民生東路4段80巷",
+        "spot_no": "05",
         "note": "Clean COMPLIANT demo, no duplicate.",
     },
     "QR-A1005": {
@@ -137,13 +154,46 @@ QR_DEMO_CODES = {
             "繳費期限：2026-07-25\n"
             "停車日期：2026-07-03\n"
             "停車開始時間：13:30\n"
-            "停車結束時間：14:30"
+            "停車結束時間：14:30\n"
+            "行政區：南港區\n"
+            "停車地點：舊莊街1段\n"
+            "車位編號：30"
         ),
         "note": "Simulates the QR decoding fine but the page failing to load; inspector reads page_preview and fills the form (MANUAL_FROM_QR_PAGE).",
     },
 }
 
 # any code not in QR_DEMO_CODES (e.g. "QR-BAD-SCAN") is treated as a scan failure.
+
+
+def _ensure_bootstrap_admin(db) -> None:
+    """Create the first sysadmin from the environment if configured and absent.
+
+    Production runs with SEED_DEMO_DATA=false, so none of the DEMO_ADMINS are
+    created and there'd be no way to sign into the console on a fresh deploy.
+    Setting BOOTSTRAP_ADMIN_USERNAME / BOOTSTRAP_ADMIN_PASSWORD provisions one
+    sysadmin from env vars instead — no credential is hard-coded in the source
+    tree, and it's idempotent (only created when that username doesn't exist).
+    Once the real admins are created through the UI, the env vars can be dropped.
+    """
+    s = get_settings()
+    if not s.bootstrap_admin_username or not s.bootstrap_admin_password:
+        return
+    if db.scalar(
+        select(AdminUser).where(AdminUser.username == s.bootstrap_admin_username)
+    ) is not None:
+        return
+    db.add(
+        AdminUser(
+            username=s.bootstrap_admin_username,
+            password=hash_password(s.bootstrap_admin_password),
+            display_name=s.bootstrap_admin_display_name or s.bootstrap_admin_username,
+            role=ROLE_SYSADMIN,
+            is_active=1,
+            created_at=datetime.now().isoformat(timespec="seconds"),
+            created_by="bootstrap",
+        )
+    )
 
 
 def seed(force: bool = False, demo: bool = True) -> None:
@@ -161,6 +211,11 @@ def seed(force: bool = False, demo: bool = True) -> None:
         for key, value in DEFAULT_SETTINGS.items():
             if get_setting(db, key) is None:
                 set_setting(db, key, value)
+
+        # Provision the env-configured bootstrap sysadmin in every environment
+        # (including production, where demo seeding is off) so a fresh deploy is
+        # never left with no way to log into the console.
+        _ensure_bootstrap_admin(db)
 
         if not demo:
             db.commit()
@@ -190,6 +245,9 @@ def seed(force: bool = False, demo: bool = True) -> None:
                         password=hash_password(admin["password"]),
                         display_name=admin["display_name"],
                         role=admin["role"],
+                        is_active=1,
+                        created_at=datetime.now().isoformat(timespec="seconds"),
+                        created_by="system",
                     )
                 )
 

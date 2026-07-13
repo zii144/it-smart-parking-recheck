@@ -43,11 +43,40 @@ async function request(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  // Error bodies aren't always JSON — a crashed handler answers with plain
+  // "Internal Server Error". Parsing must not throw here, or the caller sees a
+  // generic SyntaxError instead of an ApiError carrying the real HTTP status
+  // (and misreports a server bug as "backend not reachable").
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
   if (!res.ok) {
     throw new ApiError(res.status, data?.detail ?? data);
   }
   return data;
+}
+
+// Turn a login failure into a message that points at the actual problem: a
+// response from the backend (bad credentials, throttle, disabled account,
+// server bug) is a different situation from the backend being unreachable,
+// and telling the user to "check the backend is running" for a 500 or a 429
+// sends them debugging the wrong thing.
+export function loginErrorMessage(err) {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return "帳號或密碼錯誤";
+    // 4xx details from the backend are deliberate, zh-TW, user-facing text
+    // (e.g. 429 登入嘗試過於頻繁, 403 帳號已停用) — show them as-is.
+    if (err.status < 500 && typeof err.payload === "string" && err.payload) {
+      return err.payload;
+    }
+    return `後端服務發生錯誤（HTTP ${err.status}），請查看後端日誌後再試。`;
+  }
+  return "無法連線到後端 API，請確認後端服務已啟動 (http://localhost:8000)";
 }
 
 function toQueryString(params) {
@@ -102,6 +131,10 @@ export const adminApi = {
   listInspectors: () => request("GET", "/api/admin/inspectors"),
   createInspector: (payload) => request("POST", "/api/admin/inspectors", payload),
   updateInspector: (username, payload) => request("PATCH", `/api/admin/inspectors/${encodeURIComponent(username)}`, payload),
+  listAdmins: () => request("GET", "/api/admin/admins"),
+  createAdmin: (payload) => request("POST", "/api/admin/admins", payload),
+  updateAdmin: (username, payload) => request("PATCH", `/api/admin/admins/${encodeURIComponent(username)}`, payload),
+  deleteAdmin: (username) => request("DELETE", `/api/admin/admins/${encodeURIComponent(username)}`),
   listLocations: () => request("GET", "/api/admin/locations"),
   createLocation: (payload) => request("POST", "/api/admin/locations", payload),
   deleteLocation: (id) => request("DELETE", `/api/admin/locations/${id}`),
