@@ -323,7 +323,7 @@ function TicketUrlInput({ onScan, scanning }) {
         />
       </label>
       <button
-        className="btn-secondary"
+        className="btn-secondary btn-block"
         style={{ marginTop: 8 }}
         disabled={scanning || !looksLikeUrl}
         onClick={() => onScan(url.trim())}
@@ -342,7 +342,7 @@ function ManualCodeInput({ onScan, scanning }) {
         或輸入任意 QR 內容測試「掃描失敗」情境
         <input value={customCode} onChange={(e) => setCustomCode(e.target.value)} placeholder="例如 UNKNOWN-CODE" />
       </label>
-      <button className="btn-secondary" disabled={scanning || !customCode} onClick={() => onScan(customCode)}>
+      <button className="btn-secondary btn-block" disabled={scanning || !customCode} onClick={() => onScan(customCode)}>
         <ScanLine size={15} /> 掃描
       </button>
     </>
