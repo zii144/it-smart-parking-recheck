@@ -108,7 +108,13 @@ export default function ConfirmForm({ scanResult, savedFields, onConfirmed, onBa
           <span>QR Code 掃描失敗，請依紙本停車單內容人工輸入。</span>
         </div>
       )}
-      {scanResult.status === "success" && !scanResult.webInfo && (
+      {scanResult.status === "success" && !scanResult.webInfo && scanResult.dataSource === "OCR" && (
+        <div className="info-box success">
+          <CheckCircle2 size={16} />
+          <span>已由拍照辨識帶入停車單資料，請仔細確認內容（辨識可能有誤）。</span>
+        </div>
+      )}
+      {scanResult.status === "success" && !scanResult.webInfo && scanResult.dataSource !== "OCR" && (
         <div className="info-box success">
           <CheckCircle2 size={16} />
           <span>已自動帶入 QR 查詢頁資料，請確認內容是否正確。</span>
