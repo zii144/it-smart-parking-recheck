@@ -450,7 +450,20 @@ def _run_judgement(db: Session, ticket_no: str, parking_date_str: str, parking_s
     except ValueError as exc:
         return None, f"日期/時間格式錯誤：{exc}"
 
-    issue_dt = rules.compute_issue_datetime(parking_date, parsed)
+    # A timezone-aware parking_start (e.g. "...T09:10:00+08:00") can't be
+    # subtracted from the naive issue datetime we reconstruct from the ticket,
+    # and the ticket may encode an impossible calendar date (e.g. month=2,
+    # day=30 -> ValueError from datetime()). Both used to escape the guards
+    # above and surface as an opaque HTTP 500; treat them as a parse error so
+    # the flow degrades to the existing PARSE_ERROR path instead of crashing.
+    if parking_start.tzinfo is not None:
+        parking_start = parking_start.replace(tzinfo=None)
+
+    try:
+        issue_dt = rules.compute_issue_datetime(parking_date, parsed)
+    except ValueError as exc:
+        return None, f"帳單編號日期無效：{exc}"
+
     threshold = _current_overdue_threshold(db)
     result = rules.judge_time_diff(issue_dt, parking_start, threshold_minutes=threshold)
 
