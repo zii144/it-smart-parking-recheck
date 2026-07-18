@@ -788,6 +788,20 @@ def admin_update_case(
         is not None
     )
 
+    # If the edit turned an already-closed case back into a violation (e.g. a
+    # corrected parking_start now judges OVERDUE, or the new ticket number
+    # collides), re-open it into the review queue — otherwise the problem the
+    # edit just surfaced would never be reviewed. We only *escalate* here:
+    # de-escalating a case that's under review stays the reviewer's decision, so
+    # data-source/manual-entry review reasons (a creation-time concern) don't
+    # re-trigger on every admin edit.
+    reviewable_now = case.judgement in ("OVERDUE", "DATA_ERROR", "PARSE_ERROR") or bool(
+        case.duplicate_warning
+    )
+    if reviewable_now and case.status == "CLOSED":
+        case.status = "REVIEW_REQUIRED"
+        case.review_required = 1
+
     db.commit()
     db.refresh(case)
     return row_to_dict(case)
