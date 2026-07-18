@@ -111,7 +111,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Parking Ticket Inspection API", lifespan=lifespan)
+# The interactive docs (/docs, /redoc, /openapi.json) enumerate every endpoint
+# and schema. Useful in dev; unnecessary attack surface on a public gov deploy,
+# so switch them off in production.
+_docs_kwargs = (
+    {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    if settings.is_production
+    else {}
+)
+app = FastAPI(title="Parking Ticket Inspection API", lifespan=lifespan, **_docs_kwargs)
 
 # CORS: explicit allow-list (Goal 3). No wildcard. Bearer tokens are sent in
 # the Authorization header (not cookies), so credentials are not required.
