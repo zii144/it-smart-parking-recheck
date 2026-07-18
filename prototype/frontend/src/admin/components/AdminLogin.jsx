@@ -52,10 +52,12 @@ export default function AdminLogin({ onLoggedIn }) {
             {loading ? "登入中…" : "登入"}
           </button>
         </form>
-        <p className="hint">
-          Demo 帳號：<code>manager01</code> / <code>manager123</code>（管理人員）、
-          <code>sysadmin01</code> / <code>sysadmin123</code>（系統管理員）
-        </p>
+        {import.meta.env.DEV && (
+          <p className="hint">
+            Demo 帳號：<code>manager01</code> / <code>manager123</code>（管理人員）、
+            <code>sysadmin01</code> / <code>sysadmin123</code>（系統管理員）
+          </p>
+        )}
         <a className="btn-link app-switch-link" href="/">
           <ParkingCircle size={13} /> 前往稽查員 APP
         </a>

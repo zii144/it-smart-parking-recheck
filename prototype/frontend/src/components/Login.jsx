@@ -3,8 +3,10 @@ import { ParkingCircle, AlertCircle, LogIn, Loader2 } from "lucide-react";
 import { api, loginErrorMessage } from "../api";
 
 export default function Login({ onLoggedIn }) {
-  const [username, setUsername] = useState("insp01");
-  const [password, setPassword] = useState("pass123");
+  // Prefill the demo credentials only in dev builds — a production login screen
+  // shouldn't ship (or hint at) working-looking credentials.
+  const [username, setUsername] = useState(import.meta.env.DEV ? "insp01" : "");
+  const [password, setPassword] = useState(import.meta.env.DEV ? "pass123" : "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -53,10 +55,12 @@ export default function Login({ onLoggedIn }) {
           {loading ? "登入中…" : "登入"}
         </button>
       </form>
-      <p className="hint">
-        Demo 帳號：<code>insp01</code> / <code>pass123</code>（有稽查權限）、
-        <code>insp02</code> / <code>pass123</code>（無稽查權限，示範無權限流程）
-      </p>
+      {import.meta.env.DEV && (
+        <p className="hint">
+          Demo 帳號：<code>insp01</code> / <code>pass123</code>（有稽查權限）、
+          <code>insp02</code> / <code>pass123</code>（無稽查權限，示範無權限流程）
+        </p>
+      )}
     </div>
   );
 }

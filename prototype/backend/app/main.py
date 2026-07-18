@@ -59,12 +59,14 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import business_rules as rules
 from . import qr_service
+from .clock import local_now_iso
 from .config import get_settings
 from .media import validate_photo
 from .db import get_db, get_setting, init_db, set_setting
@@ -76,10 +78,10 @@ from .security import (
     Principal,
     create_access_token,
     hash_password,
+    password_matches,
     require_inspector,
     require_manager,
     require_sysadmin,
-    verify_password,
 )
 from .rate_limit import login_throttle
 from .seed import QR_DEMO_CODES, seed
@@ -111,7 +113,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Parking Ticket Inspection API", lifespan=lifespan)
+# The interactive docs (/docs, /redoc, /openapi.json) enumerate every endpoint
+# and schema. Useful in dev; unnecessary attack surface on a public gov deploy,
+# so switch them off in production.
+_docs_kwargs = (
+    {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    if settings.is_production
+    else {}
+)
+app = FastAPI(title="Parking Ticket Inspection API", lifespan=lifespan, **_docs_kwargs)
 
 # CORS: explicit allow-list (Goal 3). No wildcard. Bearer tokens are sent in
 # the Authorization header (not cookies), so credentials are not required.
@@ -140,9 +150,19 @@ async def _security_headers(request: Request, call_next):
 # --------------------------------------------------------------------------
 # Schemas
 # --------------------------------------------------------------------------
+# Length caps on the credential fields bound the size of an unauthenticated
+# request body and, crucially, the size of the login-throttle key derived from
+# the username — without a cap, a flood of huge unique usernames could bloat the
+# in-memory throttle store (see app/rate_limit.py).
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(max_length=150)
+    password: str = Field(max_length=1024)
+
+
+class QrScanRequest(BaseModel):
+    # Raw decoded QR content: a demo code (QR-A1001…) or a query-site URL. Capped
+    # so a scanned blob can't push an unbounded string through the resolver.
+    qr_code: str = Field(default="", max_length=4096)
 
 
 class CasePreviewRequest(BaseModel):
@@ -175,8 +195,8 @@ class CaseCreateRequest(BaseModel):
 
 
 class AdminLoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(max_length=150)
+    password: str = Field(max_length=1024)
 
 
 class ReviewRequest(BaseModel):
@@ -327,7 +347,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 
     row = db.scalar(select(Inspector).where(Inspector.username == payload.username))
 
-    if row is None or not verify_password(payload.password, row.password):
+    if not password_matches(payload.password, row.password if row else None):
         for k in keys:
             login_throttle.record_failure(k)
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
@@ -377,14 +397,14 @@ def get_locations(
 # QR scan -> resolve ticket data from the (external) query site
 # --------------------------------------------------------------------------
 @app.post("/api/qr/scan")
-def scan_qr(payload: dict, principal: Principal = Depends(require_active_inspector)):
+def scan_qr(payload: QrScanRequest, principal: Principal = Depends(require_active_inspector)):
     """Resolve a scanned QR code into ticket data.
 
     `qr_code` is the raw decoded QR content: either a built-in demo code
     (QR-A1001 ...) or a real URL to the query site. See app/qr_service.py for
     the resolution + SSRF rules.
     """
-    return qr_service.resolve((payload or {}).get("qr_code", ""))
+    return qr_service.resolve(payload.qr_code)
 
 
 # A local stand-in for the external '查詢網站', so the real fetch-and-parse path
@@ -450,7 +470,20 @@ def _run_judgement(db: Session, ticket_no: str, parking_date_str: str, parking_s
     except ValueError as exc:
         return None, f"日期/時間格式錯誤：{exc}"
 
-    issue_dt = rules.compute_issue_datetime(parking_date, parsed)
+    # A timezone-aware parking_start (e.g. "...T09:10:00+08:00") can't be
+    # subtracted from the naive issue datetime we reconstruct from the ticket,
+    # and the ticket may encode an impossible calendar date (e.g. month=2,
+    # day=30 -> ValueError from datetime()). Both used to escape the guards
+    # above and surface as an opaque HTTP 500; treat them as a parse error so
+    # the flow degrades to the existing PARSE_ERROR path instead of crashing.
+    if parking_start.tzinfo is not None:
+        parking_start = parking_start.replace(tzinfo=None)
+
+    try:
+        issue_dt = rules.compute_issue_datetime(parking_date, parsed)
+    except ValueError as exc:
+        return None, f"帳單編號日期無效：{exc}"
+
     threshold = _current_overdue_threshold(db)
     result = rules.judge_time_diff(issue_dt, parking_start, threshold_minutes=threshold)
 
@@ -568,10 +601,22 @@ def create_case(
         photo_path=photo_path,
         status=status,
         synced_offline=int(payload.offline_submitted),
-        created_at=datetime.now().isoformat(timespec="seconds"),
+        created_at=local_now_iso(),
     )
     db.add(case)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        # The photo was written to disk before this commit; if the row didn't
+        # persist, delete the now-orphaned file so /uploads doesn't accumulate
+        # images with no owning case.
+        db.rollback()
+        if photo_path:
+            try:
+                (UPLOADS_DIR / photo_path.rsplit("/", 1)[-1]).unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
     db.refresh(case)
     return row_to_dict(case)
 
@@ -610,7 +655,7 @@ def admin_login(payload: AdminLoginRequest, request: Request, db: Session = Depe
 
     row = db.scalar(select(AdminUser).where(AdminUser.username == payload.username))
 
-    if row is None or not verify_password(payload.password, row.password):
+    if not password_matches(payload.password, row.password if row else None):
         for k in keys:
             login_throttle.record_failure(k)
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
@@ -713,7 +758,7 @@ def admin_review_case(
     case.review_note = payload.note
     # Record the authenticated admin as the reviewer, not a client-supplied name.
     case.reviewed_by = principal.username
-    case.reviewed_at = datetime.now().isoformat(timespec="seconds")
+    case.reviewed_at = local_now_iso()
     case.status = new_status
     db.commit()
     db.refresh(case)
@@ -774,6 +819,20 @@ def admin_update_case(
         db.scalar(select(Case).where(Case.ticket_no == case.ticket_no, Case.id != case_id))
         is not None
     )
+
+    # If the edit turned an already-closed case back into a violation (e.g. a
+    # corrected parking_start now judges OVERDUE, or the new ticket number
+    # collides), re-open it into the review queue — otherwise the problem the
+    # edit just surfaced would never be reviewed. We only *escalate* here:
+    # de-escalating a case that's under review stays the reviewer's decision, so
+    # data-source/manual-entry review reasons (a creation-time concern) don't
+    # re-trigger on every admin edit.
+    reviewable_now = case.judgement in ("OVERDUE", "DATA_ERROR", "PARSE_ERROR") or bool(
+        case.duplicate_warning
+    )
+    if reviewable_now and case.status == "CLOSED":
+        case.status = "REVIEW_REQUIRED"
+        case.review_required = 1
 
     db.commit()
     db.refresh(case)
@@ -1059,7 +1118,14 @@ def admin_create_inspector(
             has_permission=int(payload.has_permission),
         )
     )
-    db.commit()
+    # The check above races another create of the same username; the DB unique
+    # constraint is the real guard, so translate its violation into the same
+    # 409 rather than letting it surface as an opaque 500.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="帳號已存在")
     return {
         "username": payload.username,
         "display_name": payload.display_name,
@@ -1172,11 +1238,15 @@ def admin_create_admin(
         display_name=display_name,
         role=role,
         is_active=1,
-        created_at=datetime.now().isoformat(timespec="seconds"),
+        created_at=local_now_iso(),
         created_by=principal.username,
     )
     db.add(row)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="帳號已存在")
     db.refresh(row)
     return _serialize_admin(row)
 
@@ -1285,7 +1355,13 @@ def admin_create_location(
         raise HTTPException(status_code=409, detail="此停車格已存在")
     location = Location(district=payload.district, road=payload.road, spot_no=payload.spot_no)
     db.add(location)
-    db.commit()
+    # The uq_location_spot constraint is the authoritative guard; the check
+    # above can race, so map its violation to the same 409.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="此停車格已存在")
     db.refresh(location)
     return {
         "id": location.id,

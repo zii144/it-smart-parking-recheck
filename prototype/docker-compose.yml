@@ -41,14 +41,17 @@ services:
   backend:
     build: ./backend
     environment:
-      # APP_ENV=production makes the backend fail-fast if JWT_SECRET is weak or
-      # a known placeholder (Blocker 3). The `:?` below also makes compose
-      # itself refuse to start unless JWT_SECRET is provided (e.g. via a .env
-      # file next to this one - see backend/.env.example), so the old insecure
-      # placeholder can never reach a deployment.
-      APP_ENV: production
+      # This is the local DEMO stack: it deliberately runs with demo accounts,
+      # the mock QR site, and /docs enabled, so APP_ENV=development. (In
+      # production the backend force-disables demo seeding and the mock site —
+      # see app/config.py — so a "production" demo stack would have no login
+      # accounts.) The real, hardened production stack is a separate file:
+      # deploy/docker-compose.prod.yml (APP_ENV=production, no demo data, no
+      # published backend port). The `:?` below still refuses to start without a
+      # JWT_SECRET, so a placeholder can't slip in even here.
+      APP_ENV: development
       DATABASE_URL: postgresql+psycopg2://parking:parking@db:5432/parking
-      JWT_SECRET: ${JWT_SECRET:?set a strong JWT_SECRET (>= 16 chars) before deploying}
+      JWT_SECRET: ${JWT_SECRET:?set a JWT_SECRET (>= 16 chars), e.g. in a .env file next to this one}
       JWT_EXPIRE_MINUTES: "720"
       CORS_ALLOW_ORIGINS: http://localhost:8080
       PARKING_UPLOADS_DIR: /app/data/uploads

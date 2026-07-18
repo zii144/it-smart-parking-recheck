@@ -104,6 +104,14 @@ def test_location_crud(client, sysadmin_token):
     assert not any(r["id"] == loc_id for r in listed_after)
 
 
+def test_duplicate_location_conflicts(client, sysadmin_token):
+    body = {"district": "信義區", "road": "松高路", "spot_no": "Z-002"}
+    first = client.post("/api/admin/locations", headers=auth(sysadmin_token), json=body)
+    assert first.status_code == 200
+    dup = client.post("/api/admin/locations", headers=auth(sysadmin_token), json=body)
+    assert dup.status_code == 409
+
+
 def test_overdue_threshold_setting_changes_judgement(client, sysadmin_token, inspector_token):
     # Default 60-min threshold: the ~85-min case is OVERDUE.
     before = client.post("/api/cases/preview", headers=auth(inspector_token), json=OVERDUE_CASE_PREVIEW)

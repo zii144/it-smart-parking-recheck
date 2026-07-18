@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ListChecks, PlusCircle, Inbox, ImageIcon } from "lucide-react";
+import { ListChecks, PlusCircle, Inbox, ImageIcon, AlertCircle } from "lucide-react";
 import { api, BASE } from "../api";
 import Spinner from "./Spinner";
 import { shortDateTime, statusLabel, sourceLabel } from "../format";
@@ -20,14 +20,29 @@ function Pill({ cls, children }) {
 export default function CaseList({ inspector, refreshKey, onNewCase }) {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const { page, setPage, pageSize, setPageSize, pageItems, total, pageCount } = usePagination(cases);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     api
       .listCases(inspector.username)
-      .then(setCases)
-      .finally(() => setLoading(false));
+      .then((rows) => {
+        if (!cancelled) setCases(rows ?? []);
+      })
+      .catch(() => {
+        // Otherwise a failed load silently shows the "尚無稽查案件" empty state,
+        // which reads as "you have no cases" rather than "load failed".
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [inspector.username, refreshKey]);
 
   return (
@@ -46,6 +61,13 @@ export default function CaseList({ inspector, refreshKey, onNewCase }) {
 
       {loading ? (
         <Spinner label="載入中…" />
+      ) : loadError ? (
+        <div className="empty-state">
+          <span className="icon-badge">
+            <AlertCircle size={20} />
+          </span>
+          <p>載入案件失敗，請確認網路連線後重新整理。</p>
+        </div>
       ) : cases.length === 0 ? (
         <div className="empty-state">
           <span className="icon-badge">

@@ -45,7 +45,23 @@ _KNOWN_WEAK_JWT_SECRETS = {
     "changeme",
     "secret",
     "test-secret",
+    # The exact placeholder shipped in backend/.env.example. It's 33 chars, so
+    # the length check alone would let it through — enumerate it explicitly so a
+    # blind `cp .env.example .env` can't deploy a publicly-known signing key.
+    "change-me-to-a-long-random-string",
 }
+# Substrings that betray an un-substituted placeholder even when it's long
+# enough to pass the length gate (e.g. "your-super-secret-change-me-please").
+# Matched case-insensitively anywhere in the secret.
+_WEAK_JWT_SECRET_SUBSTRINGS = (
+    "change",
+    "changeme",
+    "placeholder",
+    "example",
+    "your-secret",
+    "replace-me",
+    "todo",
+)
 _MIN_JWT_SECRET_LEN = 16
 
 
@@ -54,6 +70,7 @@ class Settings:
         # Deployment environment. Production tightens safety checks (see
         # check_runtime_safety) that only warn in development.
         self.app_env: str = os.environ.get("APP_ENV", "development").strip().lower()
+        _is_prod = self.app_env in ("production", "prod")
 
         self.database_url: str = os.environ.get("DATABASE_URL", _default_database_url())
 
@@ -108,14 +125,20 @@ class Settings:
         ]
         self.qr_query_timeout: float = float(os.environ.get("QR_QUERY_TIMEOUT", "5"))
         # A local stand-in for the external query site, for end-to-end demoing
-        # the real fetch path without a live government endpoint. Disable in prod.
-        self.qr_mock_site_enabled: bool = _env_bool("QR_MOCK_SITE_ENABLED", True)
+        # the real fetch path without a live government endpoint. Force-disabled
+        # in production so the unauthenticated /mock-qr-site endpoint can never
+        # be left exposed on a real deploy, regardless of the env flag.
+        self.qr_mock_site_requested: bool = _env_bool("QR_MOCK_SITE_ENABLED", True)
+        self.qr_mock_site_enabled: bool = self.qr_mock_site_requested and not _is_prod
 
         # Seed demo accounts / locations / sample case on startup. On for local
-        # dev & the prototype; production sets SEED_DEMO_DATA=false so no
-        # known-credential demo accounts are ever created on a real deployment
-        # (default system settings are seeded regardless of this flag).
-        self.seed_demo_data: bool = _env_bool("SEED_DEMO_DATA", True)
+        # dev & the prototype. In production this is force-disabled here (not
+        # merely defaulted off) so no known-credential demo account — e.g. the
+        # seeded sysadmin — can ever be created on a real deployment, even if a
+        # compose file or env var mistakenly requests it. Default system
+        # settings are seeded regardless of this flag.
+        self.seed_demo_requested: bool = _env_bool("SEED_DEMO_DATA", True)
+        self.seed_demo_data: bool = self.seed_demo_requested and not _is_prod
 
         # Minimum password length enforced when the admin console creates or
         # updates an *admin* account (managers/sysadmins). Kept off the inspector
@@ -147,9 +170,18 @@ class Settings:
 
     @property
     def jwt_secret_is_weak(self) -> bool:
-        """True if the signing secret is a known placeholder or too short."""
+        """True if the signing secret is a known placeholder or too short.
+
+        Beyond the exact-match list and the length gate, reject any secret that
+        still contains an obvious placeholder marker ("change", "example", …) —
+        those long-but-unsubstituted values would otherwise sail past the
+        length check and ship a guessable key.
+        """
         secret = (self.jwt_secret or "").strip()
-        return secret.lower() in _KNOWN_WEAK_JWT_SECRETS or len(secret) < _MIN_JWT_SECRET_LEN
+        lowered = secret.lower()
+        if lowered in _KNOWN_WEAK_JWT_SECRETS or len(secret) < _MIN_JWT_SECRET_LEN:
+            return True
+        return any(marker in lowered for marker in _WEAK_JWT_SECRET_SUBSTRINGS)
 
     def check_runtime_safety(self) -> None:
         """Fail-fast on insecure production configuration (Blocker 3).

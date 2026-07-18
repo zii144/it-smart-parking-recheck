@@ -36,12 +36,25 @@ function authHeaders(extra) {
   return headers;
 }
 
+// Abort a request that never resolves (dead connection, captive portal, a
+// backend hung mid-response) instead of leaving the caller's spinner spinning
+// forever. Generous enough not to trip a slow-but-progressing photo upload.
+const REQUEST_TIMEOUT_MS = 20000;
+
 async function request(method, path, body) {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: authHeaders(body ? { "Content-Type": "application/json" } : undefined),
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: authHeaders(body ? { "Content-Type": "application/json" } : undefined),
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   // Error bodies aren't always JSON — a crashed handler answers with plain
   // "Internal Server Error". Parsing must not throw here, or the caller sees a
