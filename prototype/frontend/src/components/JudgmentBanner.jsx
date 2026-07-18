@@ -13,10 +13,13 @@ const LABELS = {
 export default function JudgmentBanner({ fields, onNext, onBack }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setFailed(false);
     api
       .previewCase({
         ticket_no: fields.ticket_no,
@@ -26,13 +29,18 @@ export default function JudgmentBanner({ fields, onNext, onBack }) {
       .then((res) => {
         if (!cancelled) setResult(res);
       })
+      .catch(() => {
+        // Network/server error (or offline — this step needs the backend).
+        // Don't leave a blank card with no way out; show a recoverable error.
+        if (!cancelled) setFailed(true);
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [fields.ticket_no, fields.parking_date, fields.parking_start]);
+  }, [fields.ticket_no, fields.parking_date, fields.parking_start, retry]);
 
   if (loading) {
     return (
@@ -41,7 +49,30 @@ export default function JudgmentBanner({ fields, onNext, onBack }) {
       </div>
     );
   }
-  if (!result) return null;
+  if (failed || !result) {
+    return (
+      <div className="card">
+        <div className="card-icon-heading">
+          <span className="icon-badge">
+            <Gauge size={18} />
+          </span>
+          <h2>開單時效判定</h2>
+        </div>
+        <div className="error-box">
+          <AlertCircle size={16} />
+          <span>無法取得判定結果，請確認網路連線後重試（此步驟需要連線）。</span>
+        </div>
+        <div className="button-row">
+          <button className="btn-secondary" onClick={onBack}>
+            <ArrowLeft size={15} /> 返回修改資料
+          </button>
+          <button className="btn-primary" onClick={() => setRetry((r) => r + 1)}>
+            重試
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const label = LABELS[result.judgement] ?? { text: result.judgement, cls: "badge-warn", icon: AlertTriangle };
   const Icon = label.icon;
