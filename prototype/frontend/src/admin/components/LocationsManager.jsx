@@ -8,12 +8,18 @@ export default function LocationsManager() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ district: "", road: "", spot_no: "" });
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
   function load() {
     setLoading(true);
-    adminApi.listLocations().then(setLocations).finally(() => setLoading(false));
+    setActionError("");
+    adminApi
+      .listLocations()
+      .then((rows) => setLocations(rows ?? []))
+      .catch(() => setActionError("載入停車格清單失敗，請重新整理。"))
+      .finally(() => setLoading(false));
   }
 
   useEffect(load, []);
@@ -35,9 +41,12 @@ export default function LocationsManager() {
 
   async function handleDelete(id) {
     setDeletingId(id);
+    setActionError("");
     try {
       await adminApi.deleteLocation(id);
       load();
+    } catch {
+      setActionError("刪除失敗，請稍後再試。");
     } finally {
       setDeletingId(null);
     }
@@ -52,6 +61,8 @@ export default function LocationsManager() {
         <h2>路段 / 停車格管理</h2>
       </div>
       <p className="muted small">此處新增或刪除的停車格，會即時反映在稽查員 APP 的「選擇稽查地點」清單中。</p>
+
+      {actionError && <div className="error-box">{actionError}</div>}
 
       {loading ? (
         <Spinner label="載入中…" />

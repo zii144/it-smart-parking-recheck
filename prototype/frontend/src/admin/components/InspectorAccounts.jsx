@@ -18,6 +18,7 @@ export default function InspectorAccounts() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(EMPTY_CREATE);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [creating, setCreating] = useState(false);
   const [busyUsername, setBusyUsername] = useState(null);
 
@@ -28,16 +29,24 @@ export default function InspectorAccounts() {
 
   function load() {
     setLoading(true);
-    adminApi.listInspectors().then(setInspectors).finally(() => setLoading(false));
+    adminApi
+      .listInspectors()
+      .then((rows) => setInspectors(rows ?? []))
+      .catch(() => setActionError("載入稽查員名單失敗，請重新整理。"))
+      .finally(() => setLoading(false));
   }
 
   useEffect(load, []);
 
   async function handleToggle(inspector) {
     setBusyUsername(inspector.username);
+    setActionError("");
     try {
       await adminApi.updateInspector(inspector.username, { has_permission: !inspector.has_permission });
       load();
+    } catch (err) {
+      // Previously a failed permission toggle was swallowed with no feedback.
+      setActionError(errText(err, "更新權限失敗，請稍後再試。"));
     } finally {
       setBusyUsername(null);
     }
@@ -87,6 +96,8 @@ export default function InspectorAccounts() {
         </span>
         <h2>稽查員帳號權限管理</h2>
       </div>
+
+      {actionError && <div className="error-box">{actionError}</div>}
 
       {loading ? (
         <Spinner label="載入中…" />

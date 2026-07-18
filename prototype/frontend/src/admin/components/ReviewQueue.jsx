@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ClipboardList, Inbox, Eye } from "lucide-react";
+import { ClipboardList, Inbox, Eye, AlertCircle } from "lucide-react";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
 import CaseDetailPanel from "./CaseDetailPanel";
@@ -17,14 +17,17 @@ const JUDGE_LABEL = {
 export default function ReviewQueue({ adminUsername }) {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState(null);
   const { page, setPage, pageSize, setPageSize, pageItems, total, pageCount } = usePagination(cases);
 
   function load() {
     setLoading(true);
+    setLoadError(false);
     adminApi
       .listCases({ status: "REVIEW_REQUIRED,REVIEW_NEED_INFO" })
-      .then(setCases)
+      .then((rows) => setCases(rows ?? []))
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }
 
@@ -42,6 +45,13 @@ export default function ReviewQueue({ adminUsername }) {
 
       {loading ? (
         <Spinner label="載入中…" />
+      ) : loadError ? (
+        <div className="empty-state">
+          <span className="icon-badge">
+            <AlertCircle size={20} />
+          </span>
+          <p>載入待複核案件失敗，請確認網路連線後重新整理。</p>
+        </div>
       ) : cases.length === 0 ? (
         <div className="empty-state">
           <span className="icon-badge">

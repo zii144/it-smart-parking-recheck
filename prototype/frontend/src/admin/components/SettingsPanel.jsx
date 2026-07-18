@@ -1,29 +1,47 @@
 import { useEffect, useState } from "react";
 import { Settings, Save, Loader2, CheckCircle2 } from "lucide-react";
-import { adminApi } from "../../api";
+import { adminApi, ApiError } from "../../api";
 import Spinner from "../../components/Spinner";
 
 export default function SettingsPanel() {
   const [threshold, setThreshold] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [savedMessage, setSavedMessage] = useState(false);
 
   useEffect(() => {
-    adminApi.getSettings().then((s) => {
-      setThreshold(String(s.overdue_threshold_minutes));
-      setLoading(false);
-    });
+    let cancelled = false;
+    adminApi
+      .getSettings()
+      .then((s) => {
+        if (!cancelled) setThreshold(String(s.overdue_threshold_minutes));
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleSave(e) {
     e.preventDefault();
     setSaving(true);
     setSavedMessage(false);
+    setSaveError("");
     try {
       const updated = await adminApi.updateSettings({ overdue_threshold_minutes: Number(threshold) });
       setThreshold(String(updated.overdue_threshold_minutes));
       setSavedMessage(true);
+    } catch (err) {
+      // Surface the backend's validation message (e.g. 門檻必須大於 0) or a
+      // generic failure, instead of silently doing nothing.
+      setSaveError(err instanceof ApiError && typeof err.payload === "string" ? err.payload : "儲存失敗，請稍後再試。");
     } finally {
       setSaving(false);
     }
@@ -40,6 +58,10 @@ export default function SettingsPanel() {
 
       {loading ? (
         <Spinner label="載入中…" />
+      ) : loadError ? (
+        <div className="error-box">
+          <span>載入設定失敗，請確認網路連線後重新整理。</span>
+        </div>
       ) : (
         <form onSubmit={handleSave}>
           <label>
@@ -62,6 +84,7 @@ export default function SettingsPanel() {
               <span>設定已更新。</span>
             </div>
           )}
+          {saveError && <div className="error-box">{saveError}</div>}
 
           <div className="button-row">
             <button className="btn-primary" type="submit" disabled={saving}>
