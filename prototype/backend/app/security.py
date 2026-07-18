@@ -61,6 +61,26 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
+# A fixed bcrypt hash of a throwaway value. Verifying the submitted password
+# against it when the account doesn't exist makes the "no such user" path spend
+# the same ~bcrypt time as the "wrong password" path, so login response time no
+# longer reveals whether a username exists (timing-based user enumeration).
+_DUMMY_HASH = bcrypt.hashpw(b"timing-equalizer-not-a-real-secret", bcrypt.gensalt()).decode("utf-8")
+
+
+def password_matches(password: str, hashed: str | None) -> bool:
+    """Verify a password, spending bcrypt time even when the account is absent.
+
+    Pass `hashed=None` for a non-existent user: this still runs one bcrypt
+    comparison (against a fixed dummy hash) and returns False, equalizing the
+    timing of the user-exists and user-missing paths.
+    """
+    if not hashed:
+        verify_password(password, _DUMMY_HASH)
+        return False
+    return verify_password(password, hashed)
+
+
 # --------------------------------------------------------------------------
 # JWT issuing / decoding (Goal 2)
 # --------------------------------------------------------------------------

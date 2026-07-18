@@ -11,6 +11,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from . import business_rules as rules
+from .clock import local_now_iso
 from .config import get_settings
 from .db import SessionLocal, get_setting, set_setting
 from .models import AdminUser, Case, Inspector, Location
@@ -190,7 +191,7 @@ def _ensure_bootstrap_admin(db) -> None:
             display_name=s.bootstrap_admin_display_name or s.bootstrap_admin_username,
             role=ROLE_SYSADMIN,
             is_active=1,
-            created_at=datetime.now().isoformat(timespec="seconds"),
+            created_at=local_now_iso(),
             created_by="bootstrap",
         )
     )
@@ -246,7 +247,7 @@ def seed(force: bool = False, demo: bool = True) -> None:
                         display_name=admin["display_name"],
                         role=admin["role"],
                         is_active=1,
-                        created_at=datetime.now().isoformat(timespec="seconds"),
+                        created_at=local_now_iso(),
                         created_by="system",
                     )
                 )

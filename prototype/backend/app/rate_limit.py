@@ -33,10 +33,17 @@ class LoginThrottle:
         max_attempts: int,
         window_seconds: float,
         lockout_seconds: float,
+        max_keys: int = 50_000,
     ) -> None:
         self.max_attempts = max_attempts
         self.window_seconds = window_seconds
         self.lockout_seconds = lockout_seconds
+        # Upper bound on tracked keys. Both key components (username and client
+        # IP) are attacker-controlled, so without a cap a flood of unique values
+        # could grow this dict until OOM. Stale entries are swept first; if the
+        # store is still full of live entries, new keys aren't tracked (login
+        # still works — it just isn't throttled for that brand-new key).
+        self.max_keys = max_keys
         self._state: dict[str, _KeyState] = {}
         self._lock = threading.Lock()
 
@@ -65,11 +72,31 @@ class LoginThrottle:
         now = self._now()
         cutoff = now - self.window_seconds
         with self._lock:
+            if key not in self._state and len(self._state) >= self.max_keys:
+                # Store is at capacity: reclaim entries whose window has elapsed
+                # and that aren't actively locked. If that frees nothing, drop
+                # this new key rather than growing unbounded.
+                self._sweep(now)
+                if len(self._state) >= self.max_keys:
+                    return
             state = self._state.setdefault(key, _KeyState())
             state.failures = [t for t in state.failures if t >= cutoff]
             state.failures.append(now)
             if len(state.failures) >= self.max_attempts:
                 state.locked_until = now + self.lockout_seconds
+
+    def _sweep(self, now: float) -> None:
+        """Drop keys with no in-window failures and no active lockout. Caller
+        must hold the lock."""
+        cutoff = now - self.window_seconds
+        stale = [
+            k
+            for k, s in self._state.items()
+            if (s.locked_until is None or now >= s.locked_until)
+            and not any(t >= cutoff for t in s.failures)
+        ]
+        for k in stale:
+            self._state.pop(k, None)
 
     def reset(self, key: str | None = None) -> None:
         """Clear one key's state, or all of it (used for test isolation)."""
