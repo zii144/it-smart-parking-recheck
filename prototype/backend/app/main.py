@@ -35,6 +35,7 @@ Endpoints:
   GET  /api/admin/inspectors          - list inspector accounts [sysadmin]
   POST /api/admin/inspectors          - create an inspector account [sysadmin]
   PATCH /api/admin/inspectors/{username} - update permission/name/password [sysadmin]
+  DELETE /api/admin/inspectors/{username} - delete an inspector account [sysadmin]
   GET  /api/admin/admins              - list admin (manager/sysadmin) accounts [sysadmin]
   POST /api/admin/admins              - create an admin account [sysadmin]
   PATCH /api/admin/admins/{username}  - update name/role/password/active [sysadmin]
@@ -42,6 +43,8 @@ Endpoints:
   GET  /api/admin/locations           - flat list of parking spots [sysadmin]
   POST /api/admin/locations           - add a parking spot [sysadmin]
   DELETE /api/admin/locations/{id}    - remove a parking spot [sysadmin]
+  GET  /api/admin/import/templates/{type} - download Excel import template [sysadmin]
+  POST /api/admin/import/{type}       - bulk import from Excel (.xlsx) [sysadmin]
   GET  /api/admin/settings            - current system settings [sysadmin]
   PUT  /api/admin/settings            - update system settings [sysadmin]
 """
@@ -56,7 +59,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -67,6 +70,7 @@ from sqlalchemy.orm import Session
 
 from . import business_rules as rules
 from . import qr_service
+from .import_service import IMPORT_TYPES, build_template_workbook, run_import
 from .clock import local_now_iso
 from .config import get_settings
 from .media import validate_photo
@@ -1281,6 +1285,33 @@ def admin_update_inspector(
     }
 
 
+def _inspector_case_count(db: Session, username: str) -> int:
+    return db.scalar(
+        select(func.count()).select_from(Case).where(Case.inspector_username == username)
+    ) or 0
+
+
+@app.delete("/api/admin/inspectors/{username}")
+def admin_delete_inspector(
+    username: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    row = db.scalar(select(Inspector).where(Inspector.username == username))
+    if not row:
+        raise HTTPException(status_code=404, detail="帳號不存在")
+
+    if _inspector_case_count(db, row.username) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="此稽查員已有案件紀錄，無法刪除。請改為取消權限。",
+        )
+
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
 # --------------------------------------------------------------------------
 # Admin accounts (管理帳號): create/list/edit/disable/delete managers &
 # sysadmins. Gated to sysadmin only — a manager can review cases but must not
@@ -1492,6 +1523,18 @@ def admin_create_location(
     }
 
 
+def _location_case_count(db: Session, location: Location) -> int:
+    return db.scalar(
+        select(func.count())
+        .select_from(Case)
+        .where(
+            Case.district == location.district,
+            Case.road == location.road,
+            Case.spot_no == location.spot_no,
+        )
+    ) or 0
+
+
 @app.delete("/api/admin/locations/{location_id}")
 def admin_delete_location(
     location_id: int,
@@ -1501,9 +1544,63 @@ def admin_delete_location(
     location = db.get(Location, location_id)
     if location is None:
         raise HTTPException(status_code=404, detail="找不到該筆資料")
+
+    if _location_case_count(db, location) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="此停車格已有案件紀錄，無法刪除。",
+        )
+
     db.delete(location)
     db.commit()
     return {"ok": True}
+
+
+def _validate_import_type(import_type: str) -> str:
+    key = (import_type or "").strip().lower()
+    if key not in IMPORT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="匯入類型必須為 locations 或 inspectors",
+        )
+    return key
+
+
+@app.get("/api/admin/import/templates/{import_type}")
+def admin_import_template(
+    import_type: str,
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    key = _validate_import_type(import_type)
+    content = build_template_workbook(key)
+    filename = "parking_locations_import_template.xlsx" if key == "locations" else "parking_inspectors_import_template.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.post("/api/admin/import/{import_type}")
+async def admin_import_excel(
+    import_type: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    key = _validate_import_type(import_type)
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="僅支援 .xlsx 格式")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上傳的檔案是空的")
+
+    result, error = run_import(db, key, content)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return result.to_dict()
 
 
 @app.get("/api/admin/settings")
