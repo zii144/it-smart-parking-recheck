@@ -1,15 +1,6 @@
 /* Admin-console-only styles, layered on top of the shared design tokens
    and component classes in ../styles.css. */
 
-.app-switch-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 14px;
-  justify-content: center;
-  width: 100%;
-}
-
 /* ---------- Tabs ---------- */
 
 .admin-tabs {
@@ -21,9 +12,15 @@
   -webkit-backdrop-filter: saturate(1.4) blur(12px);
   border-bottom: 1px solid var(--color-line);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   position: sticky;
   top: 69px;
   z-index: 15;
+}
+
+.admin-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .admin-tab {
@@ -442,6 +439,9 @@
   background: var(--color-bg);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-pill);
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .subtab {
@@ -601,10 +601,20 @@
   max-width: 560px;
   max-height: 88vh;
   overflow-y: auto;
+  width: min(560px, 100%);
   /* Subtle rounded scrollbar instead of the chunky native one that clashes
      with the modal's rounded corners. */
   scrollbar-width: thin;
   scrollbar-color: rgba(28, 30, 34, 0.24) transparent;
+}
+
+.button-row-split {
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.button-row-split .button-group {
+  margin-left: auto;
 }
 .modal-card-lg::-webkit-scrollbar {
   width: 12px;
@@ -712,6 +722,40 @@ textarea:focus {
   .charts-grid {
     grid-template-columns: 1fr;
   }
+
+  .map3d {
+    height: min(460px, 52vh);
+  }
+
+  .map3d-hud {
+    width: min(224px, calc(100% - 24px));
+  }
+
+  .map3d-legend {
+    max-width: calc(100% - 24px);
+  }
+
+  .stat-value {
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-tabs {
+    padding: 10px 14px;
+    top: 58px;
+    scroll-padding-inline: 14px;
+  }
+
+  .admin-tab {
+    padding: 10px 14px;
+    min-height: 40px;
+  }
+
+  .filter-bar,
+  .inline-form {
+    padding: 14px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -728,5 +772,75 @@ textarea:focus {
   .filter-bar label,
   .inline-form label {
     min-width: 0;
+  }
+
+  .filter-bar button,
+  .inline-form button {
+    margin-left: 0;
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .admin-tab,
+  .subtab {
+    min-height: 44px;
+  }
+
+  .row-editor {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .row-editor input,
+  .row-editor select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .row-actions .btn-secondary,
+  .row-actions .btn-danger {
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+
+  .modal-card-lg {
+    width: 100%;
+    max-width: none;
+    max-height: min(100dvh, 100vh);
+    border-radius: var(--radius-lg);
+  }
+
+  .modal-overlay-drawer {
+    padding: 0;
+  }
+
+  .modal-overlay-drawer .modal-card-lg {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border-left: none;
+  }
+
+  .button-row-split {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .button-row-split > .btn-danger,
+  .button-row-split .button-group,
+  .button-row-split .button-group button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .button-row-split .button-group {
+    margin-left: 0;
+    flex-direction: column-reverse;
+  }
+
+  .chart-card {
+    padding: 14px 14px 6px;
   }
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ShieldHalf, AlertCircle, LogIn, Loader2, ParkingCircle } from "lucide-react";
+import { AlertCircle, LogIn, Loader2 } from "lucide-react";
+import AppLogo from "../../components/AppLogo";
 import { adminApi, loginErrorMessage } from "../../api";
 
 export default function AdminLogin({ onLoggedIn }) {
@@ -26,9 +27,7 @@ export default function AdminLogin({ onLoggedIn }) {
     <div className="app-shell centered">
       <div className="card" style={{ maxWidth: 380, width: "100%" }}>
         <div className="card-icon-heading">
-          <span className="icon-badge">
-            <ShieldHalf size={20} />
-          </span>
+          <AppLogo size={40} className="brand-logo" />
           <h1 style={{ fontSize: 19 }}>後台管理系統</h1>
         </div>
         <p className="muted small" style={{ marginTop: -8 }}>管理人員 / 系統管理員登入</p>
@@ -58,9 +57,6 @@ export default function AdminLogin({ onLoggedIn }) {
             <code>sysadmin01</code> / <code>sysadmin123</code>（系統管理員）
           </p>
         )}
-        <a className="btn-link app-switch-link" href="/">
-          <ParkingCircle size={13} /> 前往稽查員 APP
-        </a>
       </div>
     </div>
   );

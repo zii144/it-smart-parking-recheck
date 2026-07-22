@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ParkingCircle, AlertCircle, LogIn, Loader2 } from "lucide-react";
+import { AlertCircle, LogIn, Loader2 } from "lucide-react";
+import AppLogo from "./AppLogo";
 import { api, loginErrorMessage } from "../api";
 
 export default function Login({ onLoggedIn }) {
@@ -27,9 +28,7 @@ export default function Login({ onLoggedIn }) {
   return (
     <div className="card" style={{ maxWidth: 380, width: "100%" }}>
       <div className="card-icon-heading">
-        <span className="icon-badge">
-          <ParkingCircle size={20} />
-        </span>
+        <AppLogo size={40} className="brand-logo" />
         <div>
           <h1 style={{ fontSize: 19 }}>停車單稽查 APP</h1>
         </div>
