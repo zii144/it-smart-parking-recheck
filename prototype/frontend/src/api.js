@@ -159,6 +159,55 @@ export const adminApi = {
   deleteLocation: (id) => request("DELETE", `/api/admin/locations/${id}`),
   getSettings: () => request("GET", "/api/admin/settings"),
   updateSettings: (payload) => request("PUT", "/api/admin/settings", payload),
+  downloadImportTemplate: async (importType) => {
+    const res = await fetch(`${BASE}/api/admin/import/templates/${importType}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, await res.text());
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = importType === "locations"
+      ? "parking_locations_import_template.xlsx"
+      : "parking_inspectors_import_template.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  importExcel: async (importType, file) => {
+    const form = new FormData();
+    form.append("file", file);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let res;
+    try {
+      res = await fetch(`${BASE}/api/admin/import/${importType}`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    const text = await res.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+    if (!res.ok) {
+      throw new ApiError(res.status, data?.detail ?? data);
+    }
+    return data;
+  },
 };
 
 export { ApiError, BASE };
