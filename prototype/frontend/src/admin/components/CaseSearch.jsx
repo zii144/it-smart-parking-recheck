@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Download, Inbox, Eye, AlertCircle, Loader2 } from "lucide-react";
+import { Search, Download, FileSpreadsheet, Inbox, Eye, AlertCircle, Loader2 } from "lucide-react";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
 import CaseDetailPanel from "./CaseDetailPanel";
@@ -13,7 +13,7 @@ export default function CaseSearch({ adminUsername }) {
   const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState(null);
   const [filters, setFilters] = useState({ district: "", inspector: "", date: "", q: "" });
-  const [downloading, setDownloading] = useState(false);
+  const [downloading, setDownloading] = useState("");
   const [downloadError, setDownloadError] = useState("");
   const { page, setPage, pageSize, setPageSize, pageItems, total, pageCount } = usePagination(cases);
 
@@ -29,16 +29,15 @@ export default function CaseSearch({ adminUsername }) {
 
   useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleDownloadCsv() {
+  async function handleDownload(format) {
     setDownloadError("");
-    setDownloading(true);
+    setDownloading(format);
     try {
-      await adminApi.downloadCsv();
+      await adminApi.downloadExport(format, filters);
     } catch {
-      // Previously an unhandled rejection with no feedback if the export failed.
       setDownloadError("匯出失敗，請稍後再試。");
     } finally {
-      setDownloading(false);
+      setDownloading("");
     }
   }
 
@@ -68,9 +67,14 @@ export default function CaseSearch({ adminUsername }) {
           </span>
           <h2>案件查詢</h2>
         </div>
-        <button className="btn-secondary" type="button" onClick={handleDownloadCsv} disabled={downloading}>
-          {downloading ? <Loader2 size={15} className="spin-icon" /> : <Download size={15} />} 匯出 CSV
-        </button>
+        <div className="button-row" style={{ marginTop: 0 }}>
+          <button className="btn-secondary" type="button" onClick={() => handleDownload("csv")} disabled={!!downloading}>
+            {downloading === "csv" ? <Loader2 size={15} className="spin-icon" /> : <Download size={15} />} 匯出 CSV
+          </button>
+          <button className="btn-secondary" type="button" onClick={() => handleDownload("xlsx")} disabled={!!downloading}>
+            {downloading === "xlsx" ? <Loader2 size={15} className="spin-icon" /> : <FileSpreadsheet size={15} />} 匯出 Excel
+          </button>
+        </div>
       </div>
       {downloadError && <div className="error-box">{downloadError}</div>}
 

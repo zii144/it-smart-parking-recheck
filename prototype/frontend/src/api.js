@@ -123,11 +123,14 @@ export const adminApi = {
   updateCase: (id, payload) => request("PATCH", `/api/admin/cases/${id}`, payload),
   deleteCase: (id) => request("DELETE", `/api/admin/cases/${id}`),
   stats: () => request("GET", "/api/admin/stats"),
-  // CSV export is now an admin-protected route, so it can't be a plain <a href>
-  // download (that wouldn't carry the Authorization header). Fetch it with the
+  // CSV/XLSX export are admin-protected routes, so they can't be plain <a href>
+  // downloads (that wouldn't carry the Authorization header). Fetch with the
   // token and trigger a client-side blob download instead.
-  downloadCsv: async () => {
-    const res = await fetch(`${BASE}/api/admin/export.csv`, { headers: authHeaders() });
+  downloadExport: async (format, filters = {}) => {
+    const ext = format === "xlsx" ? "xlsx" : "csv";
+    const res = await fetch(`${BASE}/api/admin/export.${ext}${toQueryString(filters)}`, {
+      headers: authHeaders(),
+    });
     if (!res.ok) {
       throw new ApiError(res.status, await res.text());
     }
@@ -135,12 +138,14 @@ export const adminApi = {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "parking_cases_export.csv";
+    a.download = `parking_cases_export.${ext}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
   },
+  downloadCsv: (filters) => adminApi.downloadExport("csv", filters),
+  downloadXlsx: (filters) => adminApi.downloadExport("xlsx", filters),
   listInspectors: () => request("GET", "/api/admin/inspectors"),
   createInspector: (payload) => request("POST", "/api/admin/inspectors", payload),
   updateInspector: (username, payload) => request("PATCH", `/api/admin/inspectors/${encodeURIComponent(username)}`, payload),
