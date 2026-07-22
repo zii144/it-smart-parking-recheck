@@ -30,7 +30,8 @@ Endpoints:
   GET  /api/admin/cases/{id}          - single case detail [manager]
   POST /api/admin/cases/{id}/review   - record a review decision [manager]
   GET  /api/admin/stats               - aggregate statistics [manager]
-  GET  /api/admin/export.csv          - CSV export of all cases [manager]
+  GET  /api/admin/export.csv          - CSV export of cases (optional filters) [manager]
+  GET  /api/admin/export.xlsx         - Excel export of cases (optional filters) [manager]
   GET  /api/admin/inspectors          - list inspector accounts [sysadmin]
   POST /api/admin/inspectors          - create an inspector account [sysadmin]
   PATCH /api/admin/inspectors/{username} - update permission/name/password [sysadmin]
@@ -57,7 +58,7 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
@@ -691,30 +692,16 @@ def admin_list_cases(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_active_manager),
 ):
-    stmt = select(Case)
-
-    if status:
-        statuses = [s.strip() for s in status.split(",") if s.strip()]
-        if statuses:
-            stmt = stmt.where(Case.status.in_(statuses))
-    if judgement:
-        stmt = stmt.where(Case.judgement == judgement)
-    if duplicate_warning is not None:
-        stmt = stmt.where(Case.duplicate_warning == int(duplicate_warning))
-    if review_required is not None:
-        stmt = stmt.where(Case.review_required == int(review_required))
-    if district:
-        stmt = stmt.where(Case.district == district)
-    if inspector:
-        stmt = stmt.where(Case.inspector_username == inspector)
-    if date:
-        # created_at is stored as an ISO string ("2026-07-02T10:20:00"), so a
-        # day filter is a prefix match.
-        stmt = stmt.where(Case.created_at.like(f"{date}%"))
-    if q:
-        like = f"%{q}%"
-        stmt = stmt.where(or_(Case.ticket_no.like(like), Case.plate_no.like(like)))
-
+    stmt = _admin_cases_filtered_stmt(
+        status=status,
+        judgement=judgement,
+        duplicate_warning=duplicate_warning,
+        review_required=review_required,
+        district=district,
+        inspector=inspector,
+        date=date,
+        q=q,
+    )
     stmt = stmt.order_by(Case.id.desc()).limit(500)
     rows = db.scalars(stmt).all()
     return [row_to_dict(r) for r in rows]
@@ -1046,34 +1033,124 @@ def _inspection_time(created_at: str) -> str:
     return f"{dt.hour:02d}:{dt.minute:02d}"
 
 
+def _admin_cases_filtered_stmt(
+    status: Optional[str] = None,
+    judgement: Optional[str] = None,
+    duplicate_warning: Optional[bool] = None,
+    review_required: Optional[bool] = None,
+    district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,
+    q: Optional[str] = None,
+):
+    stmt = select(Case)
+
+    if status:
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        if statuses:
+            stmt = stmt.where(Case.status.in_(statuses))
+    if judgement:
+        stmt = stmt.where(Case.judgement == judgement)
+    if duplicate_warning is not None:
+        stmt = stmt.where(Case.duplicate_warning == int(duplicate_warning))
+    if review_required is not None:
+        stmt = stmt.where(Case.review_required == int(review_required))
+    if district:
+        stmt = stmt.where(Case.district == district)
+    if inspector:
+        stmt = stmt.where(Case.inspector_username == inspector)
+    if date:
+        # created_at is stored as an ISO string ("2026-07-02T10:20:00"), so a
+        # day filter is a prefix match.
+        stmt = stmt.where(Case.created_at.like(f"{date}%"))
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(or_(Case.ticket_no.like(like), Case.plate_no.like(like)))
+
+    return stmt
+
+
+def _inspector_display_names(db: Session) -> dict[str, str]:
+    return {
+        i.username: i.display_name for i in db.scalars(select(Inspector)).all()
+    }
+
+
+def _export_row_values(case: Case, name_by_username: dict[str, str]) -> list:
+    g, h, i, j = _split_ticket_no(case.ticket_no)
+    return [
+        _inspection_date(case.created_at),
+        _inspection_time(case.created_at),
+        name_by_username.get(case.inspector_username, case.inspector_username),
+        case.road or "",
+        case.spot_no or "",
+        case.plate_no or "",
+        g,
+        h,
+        i,
+        j,
+        "",
+        "",
+        "",
+    ]
+
+
+def _fetch_export_cases(
+    db: Session,
+    status: Optional[str] = None,
+    judgement: Optional[str] = None,
+    duplicate_warning: Optional[bool] = None,
+    review_required: Optional[bool] = None,
+    district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,
+    q: Optional[str] = None,
+) -> tuple[list[Case], dict[str, str]]:
+    stmt = _admin_cases_filtered_stmt(
+        status=status,
+        judgement=judgement,
+        duplicate_warning=duplicate_warning,
+        review_required=review_required,
+        district=district,
+        inspector=inspector,
+        date=date,
+        q=q,
+    )
+    cases = db.scalars(stmt.order_by(Case.id)).all()
+    return cases, _inspector_display_names(db)
+
+
 @app.get("/api/admin/export.csv")
 def admin_export_csv(
+    status: Optional[str] = None,
+    judgement: Optional[str] = None,
+    duplicate_warning: Optional[bool] = None,
+    review_required: Optional[bool] = None,
+    district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,
+    q: Optional[str] = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_active_manager),
 ):
-    rows = db.scalars(select(Case).order_by(Case.id)).all()
-    name_by_username = {
-        i.username: i.display_name for i in db.scalars(select(Inspector)).all()
-    }
+    cases, name_by_username = _fetch_export_cases(
+        db,
+        status=status,
+        judgement=judgement,
+        duplicate_warning=duplicate_warning,
+        review_required=review_required,
+        district=district,
+        inspector=inspector,
+        date=date,
+        q=q,
+    )
 
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(CSV_HEADER_NAMES)
     writer.writerow(CSV_HEADER_NOTES)
-    for c in rows:
-        g, h, i, j = _split_ticket_no(c.ticket_no)
-        writer.writerow([_csv_safe(v) for v in (
-            _inspection_date(c.created_at),                          # A 日期
-            _inspection_time(c.created_at),                          # B 檢查時間
-            name_by_username.get(c.inspector_username, c.inspector_username),  # C 調查員
-            c.road or "",                                            # D 路段
-            c.spot_no or "",                                         # E 停車格編號
-            c.plate_no or "",                                        # F 車號
-            g, h, i, j,                                              # G-J 條碼下方數字
-            "",                                                      # K 可不用 (保留)
-            "",                                                      # L 費率 (未蒐集)
-            "",                                                      # M 其他 (保留)
-        )])
+    for c in cases:
+        writer.writerow([_csv_safe(v) for v in _export_row_values(c, name_by_username)])
     buf.seek(0)
 
     # Prepend a UTF-8 BOM so Excel opens the Chinese headers correctly.
@@ -1081,6 +1158,50 @@ def admin_export_csv(
         iter(["﻿" + buf.getvalue()]),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=parking_cases_export.csv"},
+    )
+
+
+@app.get("/api/admin/export.xlsx")
+def admin_export_xlsx(
+    status: Optional[str] = None,
+    judgement: Optional[str] = None,
+    duplicate_warning: Optional[bool] = None,
+    review_required: Optional[bool] = None,
+    district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,
+    q: Optional[str] = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_manager),
+):
+    from openpyxl import Workbook
+
+    cases, name_by_username = _fetch_export_cases(
+        db,
+        status=status,
+        judgement=judgement,
+        duplicate_warning=duplicate_warning,
+        review_required=review_required,
+        district=district,
+        inspector=inspector,
+        date=date,
+        q=q,
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "案件匯出"
+    ws.append(CSV_HEADER_NAMES)
+    ws.append(CSV_HEADER_NOTES)
+    for c in cases:
+        ws.append([_csv_safe(v) for v in _export_row_values(c, name_by_username)])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=parking_cases_export.xlsx"},
     )
 
 
