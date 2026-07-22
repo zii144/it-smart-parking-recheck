@@ -1,38 +1,4 @@
-:root {
-  /* Gold accent + warm neutral palette (Crypt-inspired redesign). */
-  --color-primary: #e6a020;
-  --color-primary-dark: #c9861a;
-  --color-primary-light: #fbeecd;
-  --color-ink: #1b1d21;
-  --color-muted: #8b8f98;
-  --color-border: #ece7de;
-  --color-line: #f0ece4;
-  --color-surface: #ffffff;
-  --color-bg: #f5f2ec;
-  --color-panel: #1c1e22;      /* dark stat/hero panel */
-  --color-panel-soft: #26282d;
-
-  --color-success: #159a63;
-  --color-success-bg: #e4f5ec;
-  --color-warning: #c9861a;
-  --color-warning-bg: #fbeecd;
-  --color-danger: #e0483f;
-  --color-danger-bg: #fcebe9;
-
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --radius-lg: 22px;
-  --radius-pill: 999px;
-
-  --shadow-sm: 0 1px 2px rgba(28, 30, 34, 0.05);
-  --shadow-md: 0 10px 28px rgba(28, 30, 34, 0.06);
-  --shadow-lg: 0 20px 44px rgba(28, 30, 34, 0.12);
-
-  --space-4: 16px;
-  --space-5: 24px;
-
-  color-scheme: light;
-}
+@import "./design/tokens.css";
 
 * {
   box-sizing: border-box;
@@ -40,7 +6,7 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, "Inter", "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-family: var(--font-family);
   background: var(--color-bg);
   background-image:
     radial-gradient(circle at 100% -5%, rgba(230, 160, 32, 0.10) 0%, transparent 38%),
