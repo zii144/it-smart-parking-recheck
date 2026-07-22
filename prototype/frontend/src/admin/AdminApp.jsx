@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  ShieldHalf, LogOut, ParkingCircle, ClipboardList, Search, LayoutDashboard, Users, MapPinned, Settings,
+  LogOut, ClipboardList, Search, LayoutDashboard, Users, MapPinned, Settings,
 } from "lucide-react";
+import AppLogo from "../components/AppLogo";
 import "../styles.css";
 import "./admin.css";
 
-import { clearAuthToken } from "../api";
+import { clearAdminSession, loadAdminSession } from "../api";
 import AdminLogin from "./components/AdminLogin";
 import ReviewQueue from "./components/ReviewQueue";
 import CaseSearch from "./components/CaseSearch";
@@ -28,8 +29,21 @@ const TABS = [
 const ROLE_LABEL = { manager: "管理人員", sysadmin: "系統管理員" };
 
 export default function AdminApp() {
+  const [booting, setBooting] = useState(true);
   const [admin, setAdmin] = useState(null);
   const [tab, setTab] = useState(null);
+
+  useEffect(() => {
+    const session = loadAdminSession();
+    if (session?.admin) {
+      setAdmin(session.admin);
+    }
+    setBooting(false);
+  }, []);
+
+  if (booting) {
+    return null;
+  }
 
   if (!admin) {
     return <AdminLogin onLoggedIn={setAdmin} />;
@@ -44,9 +58,7 @@ export default function AdminApp() {
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-icon">
-            <ShieldHalf size={20} />
-          </span>
+          <AppLogo size={36} className="brand-logo" />
           <div>
             <div>後台管理系統</div>
             <span className="inspector-name">
@@ -56,10 +68,7 @@ export default function AdminApp() {
           </div>
         </div>
         <div className="header-actions">
-          <a className="btn-ghost" href="/">
-            <ParkingCircle size={15} /> 稽查員 APP
-          </a>
-          <button className="btn-ghost" onClick={() => { clearAuthToken(); setAdmin(null); }}>
+          <button className="btn-ghost" onClick={() => { clearAdminSession(); setAdmin(null); }}>
             <LogOut size={15} /> 登出
           </button>
         </div>

@@ -5,11 +5,13 @@
 // through to the localhost default the way `||` would make it.
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
-// In-memory bearer token (a signed JWT issued by the backend at login). Kept
-// in module state rather than localStorage: the logged-in view itself isn't
-// persisted across reloads (App re-shows the login screen on refresh), so
-// there's nothing to gain from persisting the token, and keeping it out of
-// storage avoids leaving a usable credential lying around.
+// In-memory bearer token (a signed JWT issued by the backend at login). Also
+// mirrored to localStorage so inspector/admin sessions survive refresh and
+// browser restart until JWT expiry or explicit logout. Inspector and admin
+// use separate storage keys because they are different roles/tokens.
+const INSPECTOR_SESSION_KEY = "parking_recheck_inspector_session_v1";
+const ADMIN_SESSION_KEY = "parking_recheck_admin_session_v1";
+
 let authToken = null;
 
 export function setAuthToken(token) {
@@ -18,6 +20,71 @@ export function setAuthToken(token) {
 
 export function clearAuthToken() {
   authToken = null;
+}
+
+function isTokenExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return typeof payload.exp !== "number" || payload.exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+}
+
+function readSession(key) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    if (!session?.token || isTokenExpired(session.token)) {
+      window.localStorage.removeItem(key);
+      return null;
+    }
+    return session;
+  } catch {
+    window.localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function writeSession(key, session) {
+  window.localStorage.setItem(key, JSON.stringify(session));
+}
+
+function clearSession(key) {
+  window.localStorage.removeItem(key);
+}
+
+export function saveInspectorSession(session) {
+  writeSession(INSPECTOR_SESSION_KEY, session);
+  setAuthToken(session.token);
+}
+
+export function loadInspectorSession() {
+  const session = readSession(INSPECTOR_SESSION_KEY);
+  if (session) setAuthToken(session.token);
+  return session;
+}
+
+export function clearInspectorSession() {
+  clearSession(INSPECTOR_SESSION_KEY);
+  clearAuthToken();
+}
+
+export function saveAdminSession(session) {
+  writeSession(ADMIN_SESSION_KEY, session);
+  setAuthToken(session.token);
+}
+
+export function loadAdminSession() {
+  const session = readSession(ADMIN_SESSION_KEY);
+  if (session) setAuthToken(session.token);
+  return session;
+}
+
+export function clearAdminSession() {
+  clearSession(ADMIN_SESSION_KEY);
+  clearAuthToken();
 }
 
 class ApiError extends Error {
@@ -98,14 +165,17 @@ function toQueryString(params) {
   return `?${entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&")}`;
 }
 
-async function loginAndStoreToken(path, username, password) {
+async function loginAndStoreToken(path, username, password, persist) {
   const res = await request("POST", path, { username, password });
-  setAuthToken(res.token);
+  persist(res);
   return res;
 }
 
 export const api = {
-  login: (username, password) => loginAndStoreToken("/api/login", username, password),
+  login: (username, password) =>
+    loginAndStoreToken("/api/login", username, password, (res) =>
+      saveInspectorSession({ token: res.token, inspector: res.inspector })
+    ),
   getLocations: () => request("GET", "/api/locations"),
   scanQr: (qr_code) => request("POST", "/api/qr/scan", { qr_code }),
   previewCase: (payload) => request("POST", "/api/cases/preview", payload),
@@ -116,7 +186,10 @@ export const api = {
 };
 
 export const adminApi = {
-  login: (username, password) => loginAndStoreToken("/api/admin/login", username, password),
+  login: (username, password) =>
+    loginAndStoreToken("/api/admin/login", username, password, (res) =>
+      saveAdminSession({ token: res.token, admin: res.admin })
+    ),
   listCases: (filters) => request("GET", `/api/admin/cases${toQueryString(filters)}`),
   getCase: (id) => request("GET", `/api/admin/cases/${id}`),
   reviewCase: (id, payload) => request("POST", `/api/admin/cases/${id}/review`, payload),
