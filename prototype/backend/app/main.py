@@ -35,6 +35,7 @@ Endpoints:
   GET  /api/admin/inspectors          - list inspector accounts [sysadmin]
   POST /api/admin/inspectors          - create an inspector account [sysadmin]
   PATCH /api/admin/inspectors/{username} - update permission/name/password [sysadmin]
+  DELETE /api/admin/inspectors/{username} - delete an inspector account [sysadmin]
   GET  /api/admin/admins              - list admin (manager/sysadmin) accounts [sysadmin]
   POST /api/admin/admins              - create an admin account [sysadmin]
   PATCH /api/admin/admins/{username}  - update name/role/password/active [sysadmin]
@@ -1281,6 +1282,33 @@ def admin_update_inspector(
     }
 
 
+def _inspector_case_count(db: Session, username: str) -> int:
+    return db.scalar(
+        select(func.count()).select_from(Case).where(Case.inspector_username == username)
+    ) or 0
+
+
+@app.delete("/api/admin/inspectors/{username}")
+def admin_delete_inspector(
+    username: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    row = db.scalar(select(Inspector).where(Inspector.username == username))
+    if not row:
+        raise HTTPException(status_code=404, detail="帳號不存在")
+
+    if _inspector_case_count(db, row.username) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="此稽查員已有案件紀錄，無法刪除。請改為取消權限。",
+        )
+
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
 # --------------------------------------------------------------------------
 # Admin accounts (管理帳號): create/list/edit/disable/delete managers &
 # sysadmins. Gated to sysadmin only — a manager can review cases but must not
@@ -1492,6 +1520,18 @@ def admin_create_location(
     }
 
 
+def _location_case_count(db: Session, location: Location) -> int:
+    return db.scalar(
+        select(func.count())
+        .select_from(Case)
+        .where(
+            Case.district == location.district,
+            Case.road == location.road,
+            Case.spot_no == location.spot_no,
+        )
+    ) or 0
+
+
 @app.delete("/api/admin/locations/{location_id}")
 def admin_delete_location(
     location_id: int,
@@ -1501,6 +1541,13 @@ def admin_delete_location(
     location = db.get(Location, location_id)
     if location is None:
         raise HTTPException(status_code=404, detail="找不到該筆資料")
+
+    if _location_case_count(db, location) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="此停車格已有案件紀錄，無法刪除。",
+        )
+
     db.delete(location)
     db.commit()
     return {"ok": True}
