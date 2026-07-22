@@ -149,6 +149,7 @@ export const adminApi = {
   listInspectors: () => request("GET", "/api/admin/inspectors"),
   createInspector: (payload) => request("POST", "/api/admin/inspectors", payload),
   updateInspector: (username, payload) => request("PATCH", `/api/admin/inspectors/${encodeURIComponent(username)}`, payload),
+  deleteInspector: (username) => request("DELETE", `/api/admin/inspectors/${encodeURIComponent(username)}`),
   listAdmins: () => request("GET", "/api/admin/admins"),
   createAdmin: (payload) => request("POST", "/api/admin/admins", payload),
   updateAdmin: (username, payload) => request("PATCH", `/api/admin/admins/${encodeURIComponent(username)}`, payload),
