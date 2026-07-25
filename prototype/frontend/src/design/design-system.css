@@ -89,6 +89,20 @@
   margin-bottom: var(--space-4);
 }
 
+.ds-hero-eyebrow .brand-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.ds-layout-phone-header .brand-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(230, 160, 32, 0.22);
+}
+
 .ds-hero h1 {
   margin: 0 0 12px;
   font-size: clamp(28px, 4vw, 36px);

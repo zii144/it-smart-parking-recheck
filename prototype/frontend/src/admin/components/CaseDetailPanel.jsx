@@ -244,11 +244,10 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
         )}
 
         {/* Manager record management: edit / delete. */}
-        <div className="button-row" style={{ justifyContent: "space-between", marginTop: 16 }}>
+        <div className="button-row button-row-split">
           {editing ? (
             <>
-              <span />
-              <div style={{ display: "flex", gap: 10 }}>
+              <div className="button-group">
                 <button className="btn-secondary" disabled={saving} onClick={() => { setEditing(false); setError(""); }}>
                   取消
                 </button>
@@ -266,7 +265,7 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
                 {deleting ? <Loader2 size={15} className="spin-icon" /> : <Trash2 size={15} />}
                 {deleting ? "刪除中…" : "刪除案件"}
               </button>
-              <div style={{ display: "flex", gap: 10 }}>
+              <div className="button-group">
                 <button className="btn-secondary" onClick={() => setEditing(true)}>
                   <Pencil size={15} /> 編輯資料
                 </button>

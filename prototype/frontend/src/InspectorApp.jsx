@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ParkingCircle, LogOut, ArrowLeft, Save, Loader2, PartyPopper, ListChecks, ShieldHalf } from "lucide-react";
+import { LogOut, ArrowLeft, Save, Loader2, PartyPopper, ListChecks } from "lucide-react";
+import AppLogo from "./components/AppLogo";
 import "./styles.css";
-import { api, ApiError, clearAuthToken } from "./api";
+import { api, ApiError, clearInspectorSession, loadInspectorSession } from "./api";
 import { loadQueue, enqueue, removeFromQueue } from "./offlineQueue";
 
 import Login from "./components/Login";
@@ -48,6 +49,7 @@ const emptyDraft = () => ({
 });
 
 export default function InspectorApp() {
+  const [booting, setBooting] = useState(true);
   const [inspector, setInspector] = useState(null);
   const [step, setStep] = useState("login");
   const [draft, setDraft] = useState(emptyDraft());
@@ -87,6 +89,15 @@ export default function InspectorApp() {
 
   useEffect(() => {
     setQueue(loadQueue());
+  }, []);
+
+  useEffect(() => {
+    const session = loadInspectorSession();
+    if (session?.inspector) {
+      setInspector(session.inspector);
+      setStep("list");
+    }
+    setBooting(false);
   }, []);
 
   // Track real connectivity and auto-flush the offline queue on reconnect.
@@ -239,13 +250,14 @@ export default function InspectorApp() {
     setStep("qr");
   }
 
+  if (booting) {
+    return null;
+  }
+
   if (step === "login") {
     return (
       <div className="app-shell centered">
         <Login onLoggedIn={(insp) => { setInspector(insp); setStep("permission"); }} />
-        <a className="btn-link app-switch-link" href="/admin">
-          <ShieldHalf size={13} /> 後台管理系統登入
-        </a>
       </div>
     );
   }
@@ -254,9 +266,7 @@ export default function InspectorApp() {
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-icon">
-            <ParkingCircle size={20} />
-          </span>
+          <AppLogo size={36} className="brand-logo" />
           <div>
             <div>停車單稽查 APP</div>
             {inspector && <span className="inspector-name">{inspector.display_name}</span>}
@@ -264,12 +274,9 @@ export default function InspectorApp() {
         </div>
         {inspector && (
           <div className="header-actions">
-            <a className="btn-ghost" href="/admin">
-              <ShieldHalf size={15} /> 後台管理
-            </a>
             <button
               className="btn-ghost"
-              onClick={() => { clearAuthToken(); setInspector(null); setStep("login"); setDraft(emptyDraft()); }}
+              onClick={() => { clearInspectorSession(); setInspector(null); setStep("login"); setDraft(emptyDraft()); }}
             >
               <LogOut size={15} /> 登出
             </button>

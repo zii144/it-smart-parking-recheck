@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  ParkingCircle,
-  ShieldHalf,
   Sun,
   Smartphone,
   Eye,
@@ -20,6 +18,7 @@ import {
   Palette,
 } from "lucide-react";
 import StepProgress from "../components/StepProgress";
+import AppLogo from "../components/AppLogo";
 import "../styles.css";
 import "../admin/admin.css";
 import "./design-system.css";
@@ -150,7 +149,7 @@ export default function DesignSystemApp() {
       <main className="ds-main">
         <header className="ds-hero">
           <span className="ds-hero-eyebrow">
-            <ParkingCircle size={14} />
+            <AppLogo size={18} className="brand-logo" />
             IT-Smart Parking Recheck
           </span>
           <h1>停車單稽查系統設計系統</h1>
@@ -363,9 +362,7 @@ export default function DesignSystemApp() {
           <div className="ds-demo-grid">
             <div className="card" style={{ margin: 0 }}>
               <div className="card-icon-heading">
-                <span className="icon-badge">
-                  <ParkingCircle size={20} />
-                </span>
+                <AppLogo size={40} className="brand-logo" />
                 <h2 style={{ fontSize: 18 }}>標準卡片</h2>
               </div>
               <p className="muted small">用於精靈各步驟、登入、權限檢查等畫面。</p>
@@ -477,9 +474,7 @@ export default function DesignSystemApp() {
           <div className="ds-layout-preview">
             <div className="ds-layout-phone">
               <div className="ds-layout-phone-header">
-                <span className="brand-icon" style={{ width: 24, height: 24, borderRadius: 8 }}>
-                  <ParkingCircle size={14} />
-                </span>
+                <AppLogo size={24} className="brand-logo" />
                 停車單稽查 APP
               </div>
               <div className="offline-bar" style={{ position: "relative", top: 0, borderRadius: 0 }}>
@@ -507,9 +502,7 @@ export default function DesignSystemApp() {
               <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>品牌識別</h3>
               <div className="ds-demo-row" style={{ marginBottom: 20 }}>
                 <div className="brand">
-                  <span className="brand-icon">
-                    <ParkingCircle size={20} />
-                  </span>
+                  <AppLogo size={36} className="brand-logo" />
                   <div>
                     <div>停車單稽查 APP</div>
                     <div className="inspector-name">稽查員 · insp01</div>
@@ -518,9 +511,7 @@ export default function DesignSystemApp() {
               </div>
               <div className="ds-demo-row">
                 <div className="brand">
-                  <span className="brand-icon">
-                    <ShieldHalf size={20} />
-                  </span>
+                  <AppLogo size={36} className="brand-logo" />
                   <div>
                     <div>後台管理系統</div>
                     <div className="inspector-name">管理人員</div>
@@ -528,7 +519,7 @@ export default function DesignSystemApp() {
                 </div>
               </div>
               <p className="hint" style={{ marginTop: 20 }}>
-                圖示使用 Lucide，全域 <code>strokeWidth={2.5}</code> 營造柔和友善感。
+                共用 <code>AppLogo</code> 金色圓角標章；Lucide 圖示仍用於功能操作，全域 <code>strokeWidth={2.5}</code>。
               </p>
             </div>
           </div>

@@ -4,6 +4,10 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   font-family: var(--font-family);
@@ -14,6 +18,13 @@ body {
   background-attachment: fixed;
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+  min-width: 0;
+}
+
+#root {
+  min-width: 0;
+  overflow-x: clip;
 }
 
 /* ---------- Layout ---------- */
@@ -34,6 +45,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 16px 20px;
   background: rgba(255, 255, 255, 0.82);
@@ -52,18 +64,36 @@ body {
   gap: 11px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.brand .brand-icon {
+.brand > div {
+  min-width: 0;
+}
+
+.brand .brand-icon,
+.brand .brand-logo {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 36px;
   height: 36px;
   border-radius: 12px;
+  box-shadow: 0 6px 14px rgba(230, 160, 32, 0.32);
+}
+
+.brand .brand-icon {
   background: linear-gradient(135deg, var(--color-primary), #f0b84a);
   color: #fff;
-  box-shadow: 0 6px 14px rgba(230, 160, 32, 0.32);
+}
+
+.card-icon-heading .brand-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  box-shadow: 0 8px 18px rgba(230, 160, 32, 0.22);
 }
 
 .brand .inspector-name {
@@ -76,11 +106,9 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
-/* Both actions are ghost pills — but one is an <a> (後台管理) and one is a
-   <button> (登出). The base button padding/radius only hits <button>, so
-   normalise the box model here for both, and kill the anchor's underline. */
 .header-actions .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -165,6 +193,7 @@ body {
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
+  min-width: 0;
 }
 
 .card-icon-heading .icon-badge {
@@ -181,6 +210,7 @@ body {
 
 .card-icon-heading h2 {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Forms ---------- */
@@ -531,6 +561,12 @@ button:active {
   margin-top: 20px;
 }
 
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 /* ---------- Text helpers ---------- */
 
 .muted {
@@ -545,6 +581,7 @@ button:active {
   font-size: 13px;
   color: var(--color-muted);
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .hint code {
@@ -1110,6 +1147,8 @@ button:active {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   padding: 10px 20px;
   background: var(--color-success-bg);
   font-size: 13px;
@@ -1518,6 +1557,11 @@ button:active {
   justify-content: center;
   z-index: 50;
   animation: fade-in 0.15s ease;
+  padding:
+    max(12px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
 }
 
 @keyframes fade-in {
@@ -1530,7 +1574,9 @@ button:active {
   border-radius: var(--radius-lg);
   padding: 26px;
   max-width: 420px;
-  width: 90%;
+  width: min(420px, 100%);
+  max-height: min(88vh, calc(100dvh - 24px));
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   animation: rise-in 0.2s ease;
 }
@@ -1549,7 +1595,50 @@ button:active {
 
 /* ---------- Responsive ---------- */
 
+/* Tablet: tighten main padding, keep tables readable */
+@media (max-width: 768px) {
+  .app-main {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .offline-bar {
+    top: 58px;
+  }
+}
+
 @media (max-width: 480px) {
+  .app-shell.centered {
+    padding: var(--space-4) 14px;
+    align-items: stretch;
+  }
+
+  .app-header {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .brand {
+    font-size: 14px;
+  }
+
+  .brand .brand-icon,
+  .brand .brand-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .header-actions .btn-ghost {
+    padding: 10px 14px;
+    min-height: 44px;
+  }
+
   .app-main {
     padding: var(--space-4) 14px 50px;
   }
@@ -1559,17 +1648,98 @@ button:active {
     border-radius: var(--radius-md);
   }
 
+  .card h1 {
+    font-size: 20px;
+  }
+
+  .card h2 {
+    font-size: 17px;
+  }
+
+  /* 16px inputs avoid iOS zoom-on-focus; 44px min height for touch. */
+  input,
+  select,
+  textarea,
+  .combo-control {
+    min-height: 44px;
+    font-size: 16px;
+    padding-top: 11px;
+    padding-bottom: 11px;
+  }
+
+  button:not(.btn-link):not(.btn-icon-only):not(.stepper-item):not(.admin-tab):not(.subtab) {
+    min-height: 44px;
+  }
+
+  .segmented button {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .list-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .list-header .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
   .qr-grid {
     grid-template-columns: 1fr;
+  }
+
+  .qr-video-wrap {
+    aspect-ratio: 3 / 4;
+    max-height: min(52vh, 420px);
+  }
+
+  .qr-camera-active-row button {
+    flex: 1 1 calc(50% - 4px);
+    min-width: calc(50% - 4px);
+    min-height: 44px;
+  }
+
+  .offline-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 14px;
+    top: 54px;
+  }
+
+  .switch-label {
+    width: 100%;
+  }
+
+  .pending-chip {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .button-row {
     flex-direction: column-reverse;
   }
 
-  .button-row button {
+  .button-row button,
+  .button-group {
     width: 100%;
+  }
+
+  .button-row button,
+  .button-group button {
     justify-content: center;
+  }
+
+  .button-group {
+    flex-direction: column-reverse;
+  }
+
+  .modal-card {
+    padding: 20px 18px;
+    width: 100%;
+    max-height: min(92dvh, calc(100dvh - 24px));
   }
 
   /* Keep the step labels — they're the tab-bar labels now — just tighten. */
