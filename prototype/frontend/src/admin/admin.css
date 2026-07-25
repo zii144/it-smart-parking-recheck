@@ -730,3 +730,84 @@ textarea:focus {
     min-width: 0;
   }
 }
+
+/* ---------- Excel import ---------- */
+
+.import-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.import-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-panel);
+  text-align: left;
+  cursor: pointer;
+}
+
+.import-type-card.active {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.import-columns {
+  margin: 8px 0 14px;
+}
+
+.import-actions {
+  margin-bottom: 14px;
+}
+
+.import-upload-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.import-file-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 240px;
+}
+
+.import-file-name {
+  margin: 0;
+  flex: 1 1 100%;
+}
+
+.import-result {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.import-result-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 768px) {
+  .import-upload-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .import-upload-form .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+}

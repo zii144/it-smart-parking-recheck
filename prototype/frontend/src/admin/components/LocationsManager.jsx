@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
-import { MapPinned, Plus, Trash2, Loader2 } from "lucide-react";
+import { MapPinned, Plus, Trash2, Loader2, AlertCircle } from "lucide-react";
 import { adminApi, ApiError } from "../../api";
 import Spinner from "../../components/Spinner";
+
+function errText(err, fallback) {
+  if (err instanceof ApiError) {
+    if (typeof err.payload === "string") return err.payload;
+  }
+  return fallback;
+}
 
 export default function LocationsManager() {
   const [locations, setLocations] = useState([]);
@@ -39,14 +46,21 @@ export default function LocationsManager() {
     }
   }
 
-  async function handleDelete(id) {
-    setDeletingId(id);
+  async function handleDelete(loc) {
+    if (
+      !window.confirm(
+        `確定要刪除停車格「${loc.district} ${loc.road} ${loc.spot_no}」嗎？此動作無法復原。`
+      )
+    ) {
+      return;
+    }
+    setDeletingId(loc.id);
     setActionError("");
     try {
-      await adminApi.deleteLocation(id);
+      await adminApi.deleteLocation(loc.id);
       load();
-    } catch {
-      setActionError("刪除失敗，請稍後再試。");
+    } catch (err) {
+      setActionError(errText(err, "刪除失敗，請稍後再試。"));
     } finally {
       setDeletingId(null);
     }
@@ -62,7 +76,12 @@ export default function LocationsManager() {
       </div>
       <p className="muted small">此處新增或刪除的停車格，會即時反映在稽查員 APP 的「選擇稽查地點」清單中。</p>
 
-      {actionError && <div className="error-box">{actionError}</div>}
+      {actionError && (
+        <div className="error-box">
+          <AlertCircle size={16} />
+          <span>{actionError}</span>
+        </div>
+      )}
 
       {loading ? (
         <Spinner label="載入中…" />
@@ -84,7 +103,7 @@ export default function LocationsManager() {
                   <td>{loc.road}</td>
                   <td>{loc.spot_no}</td>
                   <td>
-                    <button className="btn-secondary" disabled={deletingId === loc.id} onClick={() => handleDelete(loc.id)}>
+                    <button className="btn-danger" disabled={deletingId === loc.id} onClick={() => handleDelete(loc)}>
                       {deletingId === loc.id ? <Loader2 size={13} className="spin-icon" /> : <Trash2 size={13} />}
                       刪除
                     </button>
