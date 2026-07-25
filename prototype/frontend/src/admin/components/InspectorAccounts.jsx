@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Users, UserPlus, Loader2, Pencil, Check, X } from "lucide-react";
+import { Users, UserPlus, Loader2, Pencil, Check, X, Trash2 } from "lucide-react";
 import { adminApi, ApiError } from "../../api";
 import Spinner from "../../components/Spinner";
 
@@ -37,6 +37,26 @@ export default function InspectorAccounts() {
   }
 
   useEffect(load, []);
+
+  async function handleDelete(inspector) {
+    setActionError("");
+    if (
+      !window.confirm(
+        `確定要刪除稽查員「${inspector.display_name}（${inspector.username}）」嗎？此動作無法復原。`
+      )
+    ) {
+      return;
+    }
+    setBusyUsername(inspector.username);
+    try {
+      await adminApi.deleteInspector(inspector.username);
+      load();
+    } catch (err) {
+      setActionError(errText(err, "刪除失敗"));
+    } finally {
+      setBusyUsername(null);
+    }
+  }
 
   async function handleToggle(inspector) {
     setBusyUsername(inspector.username);
@@ -159,6 +179,13 @@ export default function InspectorAccounts() {
                         </button>
                         <button className="btn-secondary" onClick={() => startEdit(i)}>
                           <Pencil size={13} /> 編輯
+                        </button>
+                        <button
+                          className="btn-danger"
+                          disabled={busyUsername === i.username}
+                          onClick={() => handleDelete(i)}
+                        >
+                          <Trash2 size={13} /> 刪除
                         </button>
                       </div>
                     </td>

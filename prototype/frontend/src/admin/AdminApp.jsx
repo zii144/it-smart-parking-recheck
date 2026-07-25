@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  LogOut, ClipboardList, Search, LayoutDashboard, Users, MapPinned, Settings,
+  ShieldHalf, LogOut, ParkingCircle, ClipboardList, Search, LayoutDashboard, Users, MapPinned, Settings, FileUp,
 } from "lucide-react";
 import AppLogo from "../components/AppLogo";
 import "../styles.css";
@@ -13,6 +13,7 @@ import CaseSearch from "./components/CaseSearch";
 import StatsDashboard from "./components/StatsDashboard";
 import AccountsManager from "./components/AccountsManager";
 import LocationsManager from "./components/LocationsManager";
+import ImportManager from "./components/ImportManager";
 import SettingsPanel from "./components/SettingsPanel";
 
 // Tabs are gated by the two design roles: 管理人員 (manager) handles
@@ -23,6 +24,7 @@ const TABS = [
   { key: "stats", label: "統計資料", icon: LayoutDashboard, roles: ["manager"] },
   { key: "accounts", label: "帳號管理", icon: Users, roles: ["sysadmin"] },
   { key: "locations", label: "路段管理", icon: MapPinned, roles: ["sysadmin"] },
+  { key: "import", label: "資料匯入", icon: FileUp, roles: ["sysadmin"] },
   { key: "settings", label: "系統設定", icon: Settings, roles: ["sysadmin"] },
 ];
 
@@ -95,6 +97,7 @@ export default function AdminApp() {
         {activeTab === "stats" && <StatsDashboard />}
         {activeTab === "accounts" && <AccountsManager admin={admin} />}
         {activeTab === "locations" && <LocationsManager />}
+        {activeTab === "import" && <ImportManager />}
         {activeTab === "settings" && <SettingsPanel />}
       </main>
     </div>
