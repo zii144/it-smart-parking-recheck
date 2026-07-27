@@ -1,0 +1,30 @@
+# Phase 4 (adapted, pull-only design) backup cron jobs for parking-recheck.
+# Installed at /etc/cron.d/parking-backup on the VM (root:root, mode 644;
+# see 'crontab -l' semantics — this is the system crontab format, which
+# includes the username column that a user crontab doesn't). Runs as root:
+#   - root always has Docker socket access (needed for `docker compose exec`
+#     and the throwaway `alpine` container), regardless of group membership.
+#   - root ownership of files under /opt/parking-backups is what lets the
+#     nightly job write there while /opt/parking-backups itself stays
+#     root-owned and non-writable by the "backup-puller" group — a
+#     requirement of the OpenSSH chroot used for the pull-only SFTP user.
+#
+# Timezone on this VM is UTC (Etc/UTC). The org is Taiwan-based
+# (Asia/Taipei, UTC+8), so 19:00 UTC = 03:00 Taipei — solidly off-peak for
+# an inspection app used during daytime/evening patrol hours.
+#
+# The path below (/home/dy/parking-recheck) is a hand-copied, non-git
+# checkout on the VM — not this repo's own working directory or the CD
+# runner's checkout path. See user_manual.md §3.1 for why.
+#
+# Nightly backup: pg_dump + uploads volume export, written to
+# /opt/parking-backups. See deploy/scripts/backup.sh in this repo.
+0 19 * * * root BACKUP_DIR=/opt/parking-backups /home/dy/parking-recheck/deploy/scripts/backup.sh >> /var/log/parking-backup.log 2>&1
+
+# Local retention: keep only the last 7 days of files in /opt/parking-backups.
+# This is NOT tiered (daily/weekly/monthly) retention — that tiering, if
+# wanted, runs wherever the off-box puller runs, not this VM. A flat "delete
+# anything older than 7 days" here is an honest description of what this
+# layer actually provides: enough local buffer for the off-box side to pull
+# from, not long-term archival.
+15 19 * * * root { date -u; find /opt/parking-backups -maxdepth 1 -type f -mtime +7 -print -delete; } >> /var/log/parking-backup-prune.log 2>&1

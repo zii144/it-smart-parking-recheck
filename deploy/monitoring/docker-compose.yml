@@ -1,0 +1,42 @@
+# Standalone Uptime Kuma instance for this app — deliberately a separate
+# Compose project (name: parking-monitoring) from deploy/docker-compose.prod.yml
+# (project parking-prod), so restarting/redeploying the app stack never
+# touches monitoring and vice versa.
+#
+# Deployed at /opt/monitoring on the parking-recheck VM (not under this
+# repo's own checkout path) — bring it up with:
+#   docker compose -f deploy/monitoring/docker-compose.yml up -d
+#
+# Docker socket is mounted read-write (not :ro) so Kuma's Docker-container
+# monitors can query other containers' health directly — Kuma's Docker
+# monitor type needs the full socket API, not just a read subset. On a
+# single-VM deployment where everything already runs as a trusted,
+# root-equivalent workload, giving this container the same access is an
+# accepted risk, not an oversight — see
+# runbooks/phase-3-observability/02-deploy-uptime-kuma.md (sandbox project)
+# for the full reasoning.
+#
+# Pinned to the 1.x major (not 2.x): 2.x's stability/maturity wasn't judged
+# worth the risk for infra tooling with no other pin pressure forcing an
+# upgrade.
+
+name: parking-monitoring
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    volumes:
+      - kuma_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "3001:3001"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+volumes:
+  kuma_data:
