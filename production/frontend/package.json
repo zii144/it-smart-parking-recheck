@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:public": "vite build --config vite.public.config.js",
+    "build:public": "vite build --config vite.public.config.js && mv dist/public/public.html dist/public/index.html",
     "build:admin": "vite build --config vite.admin.config.js",
     "lint": "oxlint",
     "preview": "vite preview",
