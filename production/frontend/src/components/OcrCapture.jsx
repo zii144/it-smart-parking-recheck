@@ -25,7 +25,10 @@ export default function OcrCapture({ onResult }) {
     setFields(null);
     try {
       const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("eng", 1, {
+      // chi_tra + eng: the ticket mixes Chinese labels/values (區組/停車地點/
+      // 車位編號) with latin ticket numbers and plates, and the location
+      // fields are only recognisable with the Traditional Chinese model.
+      const worker = await createWorker("chi_tra+eng", 1, {
         logger: (m) => {
           if (m.status === "recognizing text") setProgress(Math.round(m.progress * 100));
         },
@@ -92,6 +95,9 @@ export default function OcrCapture({ onResult }) {
             <li><span>應繳金額</span><span>{fields.amount || "—"}</span></li>
             <li><span>停車日期</span><span>{fields.parking_date || "—"}</span></li>
             <li><span>停車時段</span><span>{fields.parking_start || "—"} ~ {fields.parking_end || "—"}</span></li>
+            <li><span>行政區</span><span>{fields.district || "—"}</span></li>
+            <li><span>停車地點</span><span>{fields.road || "—"}</span></li>
+            <li><span>車位編號</span><span>{fields.spot_no || "—"}</span></li>
           </ul>
           <details className="ocr-raw">
             <summary>檢視辨識原始文字</summary>

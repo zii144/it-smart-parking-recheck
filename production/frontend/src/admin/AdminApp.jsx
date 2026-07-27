@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  ShieldHalf, LogOut, ParkingCircle, ClipboardList, Search, LayoutDashboard, Users, MapPinned, Settings,
+  ShieldHalf, LogOut, ParkingCircle, ClipboardList, Search, LayoutDashboard, Users, MapPinned, Settings, FileUp,
 } from "lucide-react";
+import AppLogo from "../components/AppLogo";
 import "../styles.css";
 import "./admin.css";
 
-import { clearAuthToken } from "../api";
+import { clearAdminSession, loadAdminSession } from "../api";
 import AdminLogin from "./components/AdminLogin";
 import ReviewQueue from "./components/ReviewQueue";
 import CaseSearch from "./components/CaseSearch";
 import StatsDashboard from "./components/StatsDashboard";
 import AccountsManager from "./components/AccountsManager";
 import LocationsManager from "./components/LocationsManager";
+import ImportManager from "./components/ImportManager";
 import SettingsPanel from "./components/SettingsPanel";
 
 // Tabs are gated by the two design roles: 管理人員 (manager) handles
@@ -22,14 +24,28 @@ const TABS = [
   { key: "stats", label: "統計資料", icon: LayoutDashboard, roles: ["manager"] },
   { key: "accounts", label: "帳號管理", icon: Users, roles: ["sysadmin"] },
   { key: "locations", label: "路段管理", icon: MapPinned, roles: ["sysadmin"] },
+  { key: "import", label: "資料匯入", icon: FileUp, roles: ["sysadmin"] },
   { key: "settings", label: "系統設定", icon: Settings, roles: ["sysadmin"] },
 ];
 
 const ROLE_LABEL = { manager: "管理人員", sysadmin: "系統管理員" };
 
 export default function AdminApp() {
+  const [booting, setBooting] = useState(true);
   const [admin, setAdmin] = useState(null);
   const [tab, setTab] = useState(null);
+
+  useEffect(() => {
+    const session = loadAdminSession();
+    if (session?.admin) {
+      setAdmin(session.admin);
+    }
+    setBooting(false);
+  }, []);
+
+  if (booting) {
+    return null;
+  }
 
   if (!admin) {
     return <AdminLogin onLoggedIn={setAdmin} />;
@@ -44,9 +60,7 @@ export default function AdminApp() {
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-icon">
-            <ShieldHalf size={20} />
-          </span>
+          <AppLogo size={36} className="brand-logo" />
           <div>
             <div>後台管理系統</div>
             <span className="inspector-name">
@@ -56,10 +70,7 @@ export default function AdminApp() {
           </div>
         </div>
         <div className="header-actions">
-          <a className="btn-ghost" href="/">
-            <ParkingCircle size={15} /> 稽查員 APP
-          </a>
-          <button className="btn-ghost" onClick={() => { clearAuthToken(); setAdmin(null); }}>
+          <button className="btn-ghost" onClick={() => { clearAdminSession(); setAdmin(null); }}>
             <LogOut size={15} /> 登出
           </button>
         </div>
@@ -86,6 +97,7 @@ export default function AdminApp() {
         {activeTab === "stats" && <StatsDashboard />}
         {activeTab === "accounts" && <AccountsManager admin={admin} />}
         {activeTab === "locations" && <LocationsManager />}
+        {activeTab === "import" && <ImportManager />}
         {activeTab === "settings" && <SettingsPanel />}
       </main>
     </div>

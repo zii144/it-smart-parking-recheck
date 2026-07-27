@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Download, Inbox, Eye } from "lucide-react";
+import { Search, Download, FileSpreadsheet, Inbox, Eye, AlertCircle, Loader2 } from "lucide-react";
 import { adminApi } from "../../api";
 import Spinner from "../../components/Spinner";
 import CaseDetailPanel from "./CaseDetailPanel";
@@ -10,16 +10,36 @@ import { shortDateTime, sourceLabel } from "../../format";
 export default function CaseSearch({ adminUsername }) {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState(null);
   const [filters, setFilters] = useState({ district: "", inspector: "", date: "", q: "" });
+  const [downloading, setDownloading] = useState("");
+  const [downloadError, setDownloadError] = useState("");
   const { page, setPage, pageSize, setPageSize, pageItems, total, pageCount } = usePagination(cases);
 
   function load() {
     setLoading(true);
-    adminApi.listCases(filters).then(setCases).finally(() => setLoading(false));
+    setLoadError(false);
+    adminApi
+      .listCases(filters)
+      .then((rows) => setCases(rows ?? []))
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
   }
 
   useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDownload(format) {
+    setDownloadError("");
+    setDownloading(format);
+    try {
+      await adminApi.downloadExport(format, filters);
+    } catch {
+      setDownloadError("匯出失敗，請稍後再試。");
+    } finally {
+      setDownloading("");
+    }
+  }
 
   // Autocomplete suggestions from whatever is currently loaded.
   const districtOptions = useMemo(
@@ -47,10 +67,16 @@ export default function CaseSearch({ adminUsername }) {
           </span>
           <h2>案件查詢</h2>
         </div>
-        <button className="btn-secondary" type="button" onClick={() => adminApi.downloadCsv()}>
-          <Download size={15} /> 匯出 CSV
-        </button>
+        <div className="button-row" style={{ marginTop: 0 }}>
+          <button className="btn-secondary" type="button" onClick={() => handleDownload("csv")} disabled={!!downloading}>
+            {downloading === "csv" ? <Loader2 size={15} className="spin-icon" /> : <Download size={15} />} 匯出 CSV
+          </button>
+          <button className="btn-secondary" type="button" onClick={() => handleDownload("xlsx")} disabled={!!downloading}>
+            {downloading === "xlsx" ? <Loader2 size={15} className="spin-icon" /> : <FileSpreadsheet size={15} />} 匯出 Excel
+          </button>
+        </div>
       </div>
+      {downloadError && <div className="error-box">{downloadError}</div>}
 
       <form className="filter-bar" onSubmit={handleSearch}>
         <label>
@@ -86,6 +112,13 @@ export default function CaseSearch({ adminUsername }) {
 
       {loading ? (
         <Spinner label="載入中…" />
+      ) : loadError ? (
+        <div className="empty-state">
+          <span className="icon-badge">
+            <AlertCircle size={20} />
+          </span>
+          <p>載入案件失敗，請確認網路連線後重試。</p>
+        </div>
       ) : cases.length === 0 ? (
         <div className="empty-state">
           <span className="icon-badge">

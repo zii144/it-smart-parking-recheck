@@ -40,6 +40,23 @@ export function parseTicketText(rawText) {
   const start = times[0] || "";
   const end = times[1] || "";
 
+  // Location, as printed on the paper ticket: 區組 (行政區), 停車地點 (路段),
+  // 車位編號 (停車格). The ticket prints the 區組 value on the line below its
+  // label, so the label regexes let \s span newlines.
+  const districtLabelMatch = text.match(/(?:區\s*組|行政區)\s*[:：]?\s*([一-鿿]{1,3}區)/);
+  // Fallback: any standalone 「◯◯區」 token (e.g. 南港區) when the label was
+  // mangled by OCR — but never the literal label word 行政區 itself.
+  const districtLooseMatch = text.match(/([一-鿿]{2,3}區)(?![一-鿿])/);
+  const district =
+    districtLabelMatch?.[1] ??
+    (districtLooseMatch && districtLooseMatch[1] !== "行政區" ? districtLooseMatch[1] : "");
+
+  const roadMatch = text.match(/停車地點\s*[:：]?\s*([^\s:：][^\n]*)/);
+  const road = roadMatch ? roadMatch[1].trim() : "";
+
+  const spotMatch = text.match(/車位編號\s*[:：]?\s*([0-9A-Za-z-]{1,10})/);
+  const spot_no = spotMatch ? spotMatch[1].toUpperCase() : "";
+
   return {
     ticket_no,
     plate_no,
@@ -48,5 +65,8 @@ export function parseTicketText(rawText) {
     parking_date,
     parking_start: parking_date && start ? `${parking_date}T${start}:00` : "",
     parking_end: parking_date && end ? `${parking_date}T${end}:00` : "",
+    district,
+    road,
+    spot_no,
   };
 }

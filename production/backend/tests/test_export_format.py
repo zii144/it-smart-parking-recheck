@@ -1,8 +1,10 @@
-"""CSV export matches the field team's spreadsheet column layout."""
+"""CSV and Excel export match the field team's spreadsheet column layout."""
 from __future__ import annotations
 
 import csv
 import io
+
+from openpyxl import load_workbook
 
 from tests.conftest import auth
 
@@ -73,3 +75,40 @@ def test_export_neutralises_formula_injection(client, inspector_token, manager_t
 
     mine = [r for r in rows[2:] if r[5] == "'=1+2"]
     assert mine, "formula-injection plate was not neutralised in the export"
+
+
+def test_export_xlsx_headers_and_content(client, inspector_token, manager_token):
+    _make_case(client, inspector_token)
+    res = client.get("/api/admin/export.xlsx", headers=auth(manager_token))
+    assert res.status_code == 200
+    assert "spreadsheetml" in res.headers["content-type"]
+
+    wb = load_workbook(io.BytesIO(res.content))
+    ws = wb.active
+    assert ws.cell(1, 1).value == "日期"
+    assert ws.cell(2, 1).value == "稽查當下日期"
+
+    plates = [ws.cell(row, 6).value for row in range(3, ws.max_row + 1)]
+    assert "GHI-3456" in plates
+
+
+def test_export_respects_filters(client, inspector_token, manager_token):
+    _make_case(client, inspector_token, district="大安區", plate_no="FILTER-A")
+    _make_case(
+        client,
+        inspector_token,
+        ticket_no="Q7036002A121046",
+        district="信義區",
+        road="信義路",
+        plate_no="FILTER-B",
+    )
+    res = client.get("/api/admin/export.csv?district=大安區", headers=auth(manager_token))
+    assert res.status_code == 200
+
+    text = res.text
+    if text and text[0] == "﻿":
+        text = text[1:]
+    rows = list(csv.reader(io.StringIO(text)))
+    plates = [r[5] for r in rows[2:]]
+    assert "FILTER-A" in plates
+    assert "FILTER-B" not in plates

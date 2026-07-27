@@ -1,34 +1,55 @@
 import { useEffect, useMemo, useState } from "react";
-import { MapPin, Navigation, ArrowRight, ArrowLeft } from "lucide-react";
+import { MapPin, Navigation, ArrowRight, ArrowLeft, Ticket, AlertCircle } from "lucide-react";
 import { api } from "../api";
 import Spinner from "./Spinner";
 import SearchableSelect from "./SearchableSelect";
 
-export default function LocationSelect({ onSelected, onBack, initialDistrict = null, initialRoad = null, initialSpot = null }) {
+export default function LocationSelect({
+  onSelected,
+  onBack,
+  initialDistrict = null,
+  initialRoad = null,
+  initialSpot = null,
+  prefilledFromTicket = false,
+}) {
   const [districts, setDistricts] = useState([]);
   // Track selections by name (not array index) so they stay valid as the
   // seeded location data grows or is reordered. Seed from any already-picked
-  // values on the draft so jumping back to 地點 keeps the selection.
+  // values on the draft (extracted from the ticket data, or picked earlier) so
+  // jumping back to 地點 keeps the selection. Nothing is defaulted from the
+  // picklist itself — when the ticket didn't provide a location the inspector
+  // picks it, rather than silently inheriting the first seeded entry.
   const [districtName, setDistrictName] = useState(initialDistrict ?? "");
   const [roadName, setRoadName] = useState(initialRoad ?? "");
   const [spot, setSpot] = useState(initialSpot ?? "");
   const [gps, setGps] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    api.getLocations().then((res) => {
-      setDistricts(res.districts);
-      // Only fall back to the first options when nothing was pre-selected.
-      if (!initialDistrict) {
-        const d0 = res.districts[0];
-        const r0 = d0?.roads[0];
-        setDistrictName(d0?.district ?? "");
-        setRoadName(r0?.road ?? "");
-        setSpot(r0?.spots[0] ?? "");
-      }
-      setLoading(false);
-    });
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(false);
+    api
+      .getLocations()
+      .then((res) => {
+        if (!cancelled) setDistricts(res?.districts ?? []);
+      })
+      .catch(() => {
+        // Without this the spinner would spin forever and the inspector could
+        // neither proceed nor go back. Surface a retryable error instead.
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [retry]);
 
+  useEffect(() => {
     // Real device GPS as auxiliary positioning. It's non-blocking and the
     // whole flow works without it, so if permission is denied or geolocation
     // isn't available (e.g. served over plain http on a LAN IP), fall back to
@@ -47,8 +68,6 @@ export default function LocationSelect({ onSelected, onBack, initialDistrict = n
     } else {
       setGps(demoCoords());
     }
-    // Mount-once: initialDistrict is only the seed value for the first render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const district = useMemo(
@@ -59,18 +78,53 @@ export default function LocationSelect({ onSelected, onBack, initialDistrict = n
   const road = roads.find((r) => r.road === roadName);
   const spots = road?.spots ?? [];
 
+  // A district extracted from the ticket may not exist in the admin-managed
+  // picklist yet — keep it selectable rather than dropping it.
+  const districtOptions = useMemo(() => {
+    const names = districts.map((d) => d.district);
+    if (districtName && !names.includes(districtName)) names.unshift(districtName);
+    return names;
+  }, [districts, districtName]);
+
   function changeDistrict(name) {
     setDistrictName(name);
-    const d = districts.find((x) => x.district === name);
-    const r0 = d?.roads[0];
-    setRoadName(r0?.road ?? "");
-    setSpot(r0?.spots[0] ?? "");
+    // A different district invalidates the road/spot — clear them for the
+    // inspector to re-enter instead of guessing a default from the picklist.
+    setRoadName("");
+    setSpot("");
   }
 
   if (loading) {
     return (
       <div className="card">
         <Spinner label="載入行政區資料中…" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="card">
+        <div className="card-icon-heading">
+          <span className="icon-badge">
+            <MapPin size={18} />
+          </span>
+          <h2>選擇稽查地點</h2>
+        </div>
+        <div className="error-box">
+          <AlertCircle size={16} />
+          <span>無法載入行政區資料，請確認網路連線後重試。</span>
+        </div>
+        <div className="button-row">
+          {onBack && (
+            <button className="btn-secondary" onClick={onBack}>
+              <ArrowLeft size={15} /> 返回
+            </button>
+          )}
+          <button className="btn-primary" onClick={() => setRetry((r) => r + 1)}>
+            重試
+          </button>
+        </div>
       </div>
     );
   }
@@ -86,16 +140,24 @@ export default function LocationSelect({ onSelected, onBack, initialDistrict = n
         <h2>選擇稽查地點</h2>
       </div>
 
+      {prefilledFromTicket && (
+        <div className="info-box success">
+          <Ticket size={16} />
+          <span>已由停車單資料帶入稽查地點，請確認或修正。</span>
+        </div>
+      )}
+
       <SearchableSelect
         label="行政區"
         value={districtName}
         onChange={changeDistrict}
-        options={districts.map((d) => d.district)}
+        options={districtOptions}
         searchPlaceholder="搜尋行政區…"
       />
       <div className="field">
-        <span className="field-label">路段</span>
+        <label className="field-label" htmlFor="location-road">路段</label>
         <input
+          id="location-road"
           list="road-suggestions"
           value={roadName}
           onChange={(e) => setRoadName(e.target.value)}
@@ -110,8 +172,9 @@ export default function LocationSelect({ onSelected, onBack, initialDistrict = n
         )}
       </div>
       <div className="field">
-        <span className="field-label">停車格</span>
+        <label className="field-label" htmlFor="location-spot">停車格</label>
         <input
+          id="location-spot"
           list="spot-suggestions"
           value={spot}
           onChange={(e) => setSpot(e.target.value)}

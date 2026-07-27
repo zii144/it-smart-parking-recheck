@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import QrScanner from "qr-scanner";
 import {
   QrCode, CheckCircle2, AlertTriangle, FileWarning, ScanLine, PenLine,
-  Camera, CameraOff, RefreshCw, Zap, ZapOff, ExternalLink, Loader2, Globe,
+  Camera, CameraOff, RefreshCw, Zap, ZapOff, ExternalLink, Loader2, Globe, AlertCircle,
 } from "lucide-react";
 import { api } from "../api";
 import Spinner from "./Spinner";
@@ -104,8 +104,13 @@ function CameraScanner({ onDecoded, disabled }) {
     if (processingRef.current) return;
     processingRef.current = true;
     scannerRef.current?.stop();
-    await onDecoded(result.data);
-    processingRef.current = false;
+    try {
+      await onDecoded(result.data);
+    } finally {
+      // Always reset, even if the lookup threw — otherwise processingRef stays
+      // true and the (already-stopped) camera can never resume.
+      processingRef.current = false;
+    }
   }
 
   async function startCamera() {
@@ -258,9 +263,11 @@ function CameraScanner({ onDecoded, disabled }) {
 
 export default function QRScan({ onResult, onManualFallback }) {
   const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState(null);
 
   async function doScan(code) {
     setScanning(true);
+    setScanError(null);
     try {
       const res = await api.scanQr(code);
       if (res.status === "success") {
@@ -275,6 +282,11 @@ export default function QRScan({ onResult, onManualFallback }) {
       } else {
         onResult({ status: "scan_failed", dataSource: "MANUAL_FROM_TICKET" });
       }
+    } catch {
+      // Without this the spinner just turns off and nothing happens — the
+      // inspector is stranded with no feedback. Show a retryable error, and use
+      // the manual fallback for a fully offline path.
+      setScanError("查詢失敗，請確認網路連線後再試，或改用下方人工輸入。");
     } finally {
       setScanning(false);
     }
@@ -291,6 +303,12 @@ export default function QRScan({ onResult, onManualFallback }) {
 
       <CameraScanner onDecoded={doScan} disabled={scanning} />
       {scanning && <Spinner label="辨識中…" />}
+      {scanError && (
+        <div className="error-box">
+          <AlertCircle size={16} />
+          <span>{scanError}</span>
+        </div>
+      )}
 
       <div className="divider" />
       <p className="muted small">

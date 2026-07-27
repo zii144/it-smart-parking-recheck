@@ -18,15 +18,22 @@ COPY . .
 # backend service. Local `npm run dev` still uses the absolute URL in .env.
 ENV VITE_API_BASE=""
 
-RUN npm run build
+# This container is admin/design-only — InspectorApp is served separately as
+# a public static bundle (see vite.public.config.js). Building only
+# admin.html's entry point means AdminApp/DesignSystemApp never ship a public
+# build (see vite.admin.config.js, scripts/verify-build-split.sh).
+RUN npm run build:admin
 
 # ---- serve stage ----
 FROM nginx:1.27-alpine
 
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/dist/admin /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
+# 127.0.0.1, not localhost: nginx only listens on IPv4 (`listen 80;`), but
+# some container network configs resolve "localhost" to ::1 first, which
+# then fails with a false-negative "unhealthy" despite nginx working fine.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
-    CMD wget -qO- http://localhost:80/ >/dev/null || exit 1
+    CMD wget -qO- http://127.0.0.1:80/ >/dev/null || exit 1
