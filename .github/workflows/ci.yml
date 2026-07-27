@@ -102,3 +102,29 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  image-scan:
+    name: Image scan (Trivy)
+    needs: [backend-tests, frontend]
+    runs-on: ubuntu-latest
+    env:
+      # docker compose interpolates the whole file (including this) even for
+      # `build`, which doesn't otherwise need a real secret — the compose
+      # file's ${JWT_SECRET:?...} guard would fail parsing without it.
+      JWT_SECRET: ci-only-secret-not-for-real-use-0000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build images
+        run: docker compose -f prototype/docker-compose.yml build
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin
+
+      - name: Scan backend image
+        run: trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 prototype-backend:latest
+
+      - name: Scan frontend image
+        run: trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 prototype-frontend:latest
