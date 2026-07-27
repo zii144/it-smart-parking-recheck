@@ -1,0 +1,114 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to deploy (defaults to the latest main)"
+        required: false
+
+# Deviation from the runbook as literally written: it declared only `actions: read`.
+# Setting an explicit `permissions:` block replaces GITHUB_TOKEN's default permissions
+# entirely - anything not listed becomes `none`, including `contents`. Without
+# `contents: read`, actions/checkout@v4 cannot even fetch this private repo: it fails
+# with a generic "remote: Repository not found" (GitHub deliberately doesn't reveal
+# *why* to an unauthorized token) rather than a clear permissions error. Confirmed by
+# reproducing it live: checkout of a real, valid commit SHA on `main` failed this way
+# during the acceptance test until this line was added.
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, parking-prod]
+    env:
+      DEPLOY_STATE_DIR: /opt/parking-deploy-state
+    steps:
+      - name: Determine commit to deploy
+        id: target
+        run: echo "sha=${{ github.event.inputs.sha || github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+
+      # Deviation from the runbook as literally written: actions/checkout@v4 defaults to
+      # clean:true, which runs `git clean -ffdx` before checkout and wipes anything
+      # untracked/gitignored in the workspace - including deploy/.env.production (real
+      # secrets, deliberately gitignored, never committed). On top of that, this is a fresh
+      # checkout every run, so the file is never created by checkout in the first place.
+      # Every pipeline.sh command below calls require_envfile and would die immediately
+      # without this. Fix: the real secrets file was copied once, out-of-band, to
+      # /opt/parking-deploy-state/.env.production (same persistent-outside-the-checkout
+      # directory the runbook already uses for last-good-tag, same reasoning: must survive
+      # a wiped workspace). Restore it into the fresh checkout here, every run.
+      - name: Restore production secrets (survives clean checkout)
+        run: |
+          cp "$DEPLOY_STATE_DIR/.env.production" deploy/.env.production
+          chmod 600 deploy/.env.production
+
+      - name: Confirm CI passed for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion="$(gh run list --workflow=ci.yml --commit "${{ steps.target.outputs.sha }}" \
+            --json conclusion --jq '.[0].conclusion' --limit 1)"
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::CI did not succeed for ${{ steps.target.outputs.sha }} (found: ${conclusion:-no run at all}). Refusing to deploy."
+            exit 1
+          fi
+
+      # Deviation from the runbook's literal `sudo mkdir -p` / `sudo touch`: gha-runner has
+      # no sudo (Step 1's own reasoning - it's scoped to only the docker group). Instead,
+      # /opt/parking-deploy-state was created once during Step 1 setup and chown'd to
+      # gha-runner:gha-runner directly (the "simpler" alternative the runbook's own Step 3
+      # notes explicitly call out) - see 03-create-deploy-workflow.md's "Notes for whoever
+      # implements this". No sudo needed here at all.
+      - name: Read previous good tag (for rollback)
+        id: prev
+        run: |
+          mkdir -p "$DEPLOY_STATE_DIR"
+          touch "$DEPLOY_STATE_DIR/last-good-tag"
+          echo "tag=$(cat "$DEPLOY_STATE_DIR/last-good-tag")" >> "$GITHUB_OUTPUT"
+
+      # --skip-tests (2026-07-26): the previous step already confirmed CI passed for this
+      # exact commit's exact code - re-running the identical backend pytest suite here was
+      # pure redundancy, not an independent check (same commit, same tests, same result),
+      # and was the single largest cost in this workflow (~4m19s of a ~6m run). Dropping the
+      # "second gate" re-test in favor of trusting the CI-passed check that already ran.
+      - name: Promote prototype -> production
+        run: ./pipeline.sh update-production --skip-tests
+
+      - name: Build production images
+        id: build
+        run: |
+          TAG="$(git rev-parse --short HEAD)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          ./pipeline.sh build-production "$TAG"
+
+      - name: Deploy
+        run: ./pipeline.sh deploy "${{ steps.build.outputs.tag }}"
+
+      - name: Verify health
+        run: ./pipeline.sh verify
+
+      - name: Record this tag as last-good
+        if: success()
+        run: echo "${{ steps.build.outputs.tag }}" > "$DEPLOY_STATE_DIR/last-good-tag"
+
+      - name: Roll back to previous good tag on failure
+        if: failure() && steps.prev.outputs.tag != ''
+        run: ./pipeline.sh rollback "${{ steps.prev.outputs.tag }}"
+
+      - name: No previous tag to roll back to
+        if: failure() && steps.prev.outputs.tag == ''
+        run: |
+          echo "::error::Deploy failed and there is no previous good tag on record (first-ever deploy). Manual intervention required - check 'pipeline.sh logs' on the VM."
+
+      - name: Notify
+        if: always()
+        run: |
+          echo "Deploy of ${{ steps.build.outputs.tag || 'unknown' }} finished with status: ${{ job.status }}"
+          # Replace with a real Slack webhook / email call once the team picks a channel -
+          # devops_plan.md §5.4 point 7 calls for this; not automated yet.

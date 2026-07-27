@@ -72,10 +72,31 @@ function SectionTitle({ icon: Icon, children }) {
 export default function StatsDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    adminApi.stats().then(setStats).finally(() => setLoading(false));
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+    setFailed(false);
+    adminApi
+      .stats()
+      .then((s) => {
+        if (!cancelled) setStats(s);
+      })
+      .catch(() => {
+        // Without a catch, a failed stats call left stats=null and then threw
+        // a TypeError during render (stats.by_judgement) — which, with no error
+        // boundary, used to white-screen the whole admin console.
+        if (!cancelled) setFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [retry]);
 
   if (loading) {
     return (
@@ -85,6 +106,21 @@ export default function StatsDashboard() {
           <h2>統計資料</h2>
         </div>
         <Spinner label="載入統計資料中…" />
+      </div>
+    );
+  }
+
+  if (failed || !stats) {
+    return (
+      <div className="card">
+        <div className="card-icon-heading">
+          <span className="icon-badge"><LayoutDashboard size={18} /></span>
+          <h2>統計資料</h2>
+        </div>
+        <div className="error-box">
+          <span>載入統計資料失敗，請確認網路連線後重試。</span>
+        </div>
+        <button className="btn-primary" onClick={() => setRetry((r) => r + 1)}>重試</button>
       </div>
     );
   }

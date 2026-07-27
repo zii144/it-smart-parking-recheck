@@ -28,6 +28,7 @@ DEPLOY="$ROOT/deploy"
 COMPOSE="$DEPLOY/docker-compose.prod.yml"
 ENVFILE="$DEPLOY/.env.production"
 ENVEXAMPLE="$DEPLOY/.env.production.example"
+LAST_GOOD_FILE="$DEPLOY/.last-good-tag"
 
 # --- colours --------------------------------------------------------------
 if [ -t 1 ]; then
@@ -143,7 +144,8 @@ cmd_update_production() {
     --exclude 'docker-compose.yml' --exclude '.DS_Store' \
     --exclude '*.swp' --exclude '*.swo' --exclude '*~' \
     --exclude 'PROMOTION.txt' \
-    "$PROTOTYPE/" "$PRODUCTION/"
+    "$PROTOTYPE/" "$PRODUCTION/" \
+    || die "rsync promotion failed — production/ may be partially updated; inspect with 'git status production/' before retrying."
 
   {
     echo "source       prototype/"
@@ -160,17 +162,52 @@ cmd_build_production() {
   require_production; require_envfile; require_docker; check_secret
   local tag="${1:-$(git_sha)}"
   step "Building production images (tag: $tag)"
-  TAG="$tag" dc build
+  TAG="$tag" dc build || die "Image build failed (tag: $tag)."
   ok "Built parking-backend:$tag and parking-frontend:$tag"
+}
+
+# Pull the CI-built, scanned images from GHCR instead of rebuilding on the VM,
+# and re-tag them locally so the compose file's image:$TAG references resolve
+# without a rebuild. Requires GHCR_OWNER set in deploy/.env.production and the
+# VM's docker already logged in to ghcr.io (same as the CI publish job).
+cmd_pull_production() {
+  require_envfile; require_docker
+  local tag="${1:?Usage: ./pipeline.sh pull-production <tag>}"
+  local owner; owner="$(env_val GHCR_OWNER)"
+  [ -n "$owner" ] || die "GHCR_OWNER not set in $ENVFILE (e.g. GHCR_OWNER=my-org) — required to pull published images."
+  step "Pulling published images from ghcr.io (tag: $tag)"
+  docker pull "ghcr.io/$owner/parking-backend:$tag"  || die "docker pull parking-backend:$tag failed."
+  docker pull "ghcr.io/$owner/parking-frontend:$tag" || die "docker pull parking-frontend:$tag failed."
+  docker tag "ghcr.io/$owner/parking-backend:$tag"  "parking-backend:$tag"
+  docker tag "ghcr.io/$owner/parking-frontend:$tag" "parking-frontend:$tag"
+  ok "Pulled and tagged parking-backend:$tag, parking-frontend:$tag"
 }
 
 cmd_deploy() {
   require_production; require_envfile; require_docker; check_secret
-  local tag="${1:-$(git_sha)}"
+  local pull=0 tag=""
+  for a in "$@"; do
+    case "$a" in
+      --pull) pull=1 ;;
+      *) tag="$a" ;;
+    esac
+  done
+  tag="${tag:-$(git_sha)}"
+
   step "Deploying production stack (tag: $tag)"
-  TAG="$tag" dc up -d --build
+  if [ "$pull" -eq 1 ]; then
+    cmd_pull_production "$tag"
+    TAG="$tag" dc up -d || die "docker compose up failed (tag: $tag)."
+  else
+    TAG="$tag" dc up -d --build || die "docker compose up --build failed (tag: $tag)."
+  fi
+
   step "Waiting for the stack to become healthy"
-  cmd_verify || warn "Health check did not confirm readiness; check ./pipeline.sh logs."
+  if cmd_verify; then
+    echo "$tag" > "$LAST_GOOD_FILE"
+  else
+    warn "Health check did not confirm readiness; check ./pipeline.sh logs. (Not recorded as last-good — $LAST_GOOD_FILE unchanged.)"
+  fi
   local port; port="$(frontend_port)"
   echo
   ok "Deployed."
@@ -189,7 +226,7 @@ cmd_release() {
 cmd_migrate() {
   require_envfile; require_docker
   step "Applying database migrations (alembic upgrade head)"
-  dc exec -T backend alembic upgrade head
+  dc exec -T backend alembic upgrade head || die "Migration failed (alembic upgrade head) — check ./pipeline.sh logs backend."
   ok "Migrations applied."
 }
 
@@ -260,11 +297,19 @@ cmd_verify() {
 cmd_rollback() {
   require_production; require_envfile; require_docker; check_secret
   local tag="${1:-}"
-  [ -n "$tag" ] || die "Usage: ./pipeline.sh rollback <image-tag>   (a previously built tag; see 'docker images parking-backend')"
+  if [ -z "$tag" ] && [ -f "$LAST_GOOD_FILE" ]; then
+    tag="$(cat "$LAST_GOOD_FILE")"
+    info "${C_DIM}No tag given — using last known-good tag from $LAST_GOOD_FILE: $tag${C_RST}"
+  fi
+  [ -n "$tag" ] || die "Usage: ./pipeline.sh rollback <image-tag>   (a previously built tag; see 'docker images parking-backend'. No $LAST_GOOD_FILE found to default to.)"
   step "Rolling back to tag: $tag"
-  TAG="$tag" dc up -d
-  cmd_verify || warn "Rollback health check inconclusive; check logs."
-  ok "Rolled back to $tag."
+  TAG="$tag" dc up -d || die "docker compose up failed while rolling back to $tag."
+  if cmd_verify; then
+    echo "$tag" > "$LAST_GOOD_FILE"
+    ok "Rolled back to $tag."
+  else
+    warn "Rollback health check inconclusive; check logs. (Not recorded as last-good — $LAST_GOOD_FILE unchanged.)"
+  fi
 }
 
 cmd_diff() {
@@ -292,14 +337,20 @@ ${C_B}Parking Ticket Inspection System — production pipeline${C_RST}
   ${C_B}Promote & build${C_RST}
     update-production [--skip-tests]   Promote prototype/ -> production/ (test-gated)
     diff                               Show what update-production would change
-    build-production [tag]             Build tagged production images
+    build-production [tag]             Build tagged production images locally
+    pull-production <tag>              Pull+tag CI-published images from GHCR instead of building
+                                        (requires GHCR_OWNER in deploy/.env.production, docker
+                                        already logged in to ghcr.io)
     release [--skip-tests]             update-production -> build-production -> deploy
 
   ${C_B}Run${C_RST}
-    deploy [tag]        Build (if needed) + start the prod stack + verify
+    deploy [--pull] [tag]   Start the prod stack + verify. Default: build locally.
+                            --pull: pull the tag from GHCR (see pull-production) instead
+                            of rebuilding. Records deploy/.last-good-tag on a healthy verify.
     migrate             Run alembic upgrade head in the backend container
     create-admin <u> [name] [role]   Create/reset a real admin (role: manager|sysadmin)
-    rollback <tag>      Redeploy a previously built image tag
+    rollback [tag]      Redeploy a previously built/pulled image tag.
+                        Omit tag to use deploy/.last-good-tag if present.
 
   ${C_B}Manage${C_RST}
     status              docker compose ps for the prod stack
@@ -322,6 +373,7 @@ main() {
   case "$cmd" in
     update-production|promote) cmd_update_production "$@" ;;
     build-production|build)    cmd_build_production "$@" ;;
+    pull-production|pull)      cmd_pull_production "$@" ;;
     deploy|up)                 cmd_deploy "$@" ;;
     release)                   cmd_release "$@" ;;
     migrate)                   cmd_migrate "$@" ;;

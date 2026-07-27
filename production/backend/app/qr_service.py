@@ -2,7 +2,8 @@
 
 A parking-ticket QR encodes a URL pointing at an external '查詢網站' (query
 page). Scanning it yields that URL; the backend fetches the page and parses the
-ticket fields (帳單編號/車號/金額/期限/停車時間) out of it.
+ticket fields (帳單編號/車號/金額/期限/停車時間, plus 行政區/停車地點/車位編號
+when the page provides them) out of it.
 
 `resolve(qr_content)` returns one of the shapes the frontend already expects:
 
@@ -40,16 +41,23 @@ from .seed import QR_DEMO_CODES
 
 logger = logging.getLogger("parking.qr")
 
-# Fields we try to extract from a query page, and the zh-TW labels the page
-# uses for each (for the human-readable / HTML variant of the response).
-TEXT_LABELS: dict[str, str] = {
-    "ticket_no": "帳單編號",
-    "plate_no": "車牌號碼",
-    "amount": "應繳金額",
-    "due_date": "繳費期限",
-    "parking_date": "停車日期",
-    "parking_start": "停車開始時間",
-    "parking_end": "停車結束時間",
+# Fields we try to extract from a query page, and the zh-TW label variants a
+# page may use for each. The location fields (district/road/spot_no) are
+# optional extras: when the source provides them they pre-fill the 選擇稽查地點
+# step, but tickets without them still resolve fine (see REQUIRED_FIELDS).
+# 區組/停車地點/車位編號 are the labels printed on the paper ticket; 行政區/
+# 路段/停車格 are the wording the app itself uses.
+TEXT_LABELS: dict[str, tuple[str, ...]] = {
+    "ticket_no": ("帳單編號",),
+    "plate_no": ("車牌號碼",),
+    "amount": ("應繳金額",),
+    "due_date": ("繳費期限",),
+    "parking_date": ("停車日期",),
+    "parking_start": ("停車開始時間",),
+    "parking_end": ("停車結束時間",),
+    "district": ("行政區", "區組"),
+    "road": ("停車地點", "路段"),
+    "spot_no": ("車位編號", "停車格"),
 }
 
 # Minimum fields required to treat a fetch as a usable ticket. Without these the
@@ -259,10 +267,12 @@ def _parse_ticket(body: str, content_type: str) -> dict | None:
     else:
         # Labeled text / HTML. Strip tags so labels inside markup still match.
         text = re.sub(r"<[^>]+>", "\n", body)
-        for field, label in TEXT_LABELS.items():
-            m = re.search(rf"{re.escape(label)}\s*[：:]\s*(.+)", text)
-            if m:
-                data[field] = m.group(1).strip()
+        for field, labels in TEXT_LABELS.items():
+            for label in labels:
+                m = re.search(rf"{re.escape(label)}\s*[：:]\s*(.+)", text)
+                if m:
+                    data[field] = m.group(1).strip()
+                    break
 
     return _normalise(data)
 

@@ -1,13 +1,29 @@
-import { AlertTriangle, Undo2, Save, Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { AlertTriangle, Undo2, Save, Loader2, AlertCircle } from "lucide-react";
 
-export default function DuplicateModal({ existingCase, onSaveAnyway, onCancel, saving }) {
+export default function DuplicateModal({ existingCase, onSaveAnyway, onCancel, saving, error }) {
+  // Escape closes the dialog (unless a save is mid-flight), matching the
+  // overlay's cancel button and native dialog expectations.
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape" && !saving) onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [saving, onCancel]);
+
   return (
     <div className="modal-overlay">
-      <div className="modal-card">
+      <div
+        className="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="duplicate-modal-title"
+      >
         <div className="modal-icon">
           <AlertTriangle size={22} />
         </div>
-        <h2>帳單編號重複</h2>
+        <h2 id="duplicate-modal-title">帳單編號重複</h2>
         <p className="muted small">此帳單編號已存在稽查案件中：</p>
         <ul className="kv-list">
           <li>
@@ -29,6 +45,12 @@ export default function DuplicateModal({ existingCase, onSaveAnyway, onCancel, s
             <span>{existingCase.status}</span>
           </li>
         </ul>
+        {error && (
+          <div className="error-box">
+            <AlertCircle size={16} />
+            <span>{error}</span>
+          </div>
+        )}
         <div className="button-row">
           <button className="btn-secondary" onClick={onCancel} disabled={saving}>
             <Undo2 size={15} /> 取消儲存

@@ -17,6 +17,11 @@ name: parking-prod
 services:
   db:
     image: postgres:16-alpine
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in deploy/.env.production}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env.production}
@@ -33,6 +38,11 @@ services:
   backend:
     build: ../production/backend
     image: parking-backend:${TAG:-latest}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       APP_ENV: production
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-parking}
@@ -59,9 +69,29 @@ services:
     # network, via the nginx frontend. Nothing on the host talks to it directly.
     restart: unless-stopped
 
+  edge-proxy:
+    build: ./edge-proxy
+    image: parking-edge-proxy:${TAG:-latest}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    ports:
+      - "127.0.0.1:8090:8090"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
   frontend:
     build: ../production/frontend
     image: parking-frontend:${TAG:-latest}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     depends_on:

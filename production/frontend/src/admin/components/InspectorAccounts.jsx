@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Users, UserPlus, Loader2, Pencil, Check, X } from "lucide-react";
+import { Users, UserPlus, Loader2, Pencil, Check, X, Trash2 } from "lucide-react";
 import { adminApi, ApiError } from "../../api";
 import Spinner from "../../components/Spinner";
 
@@ -18,6 +18,7 @@ export default function InspectorAccounts() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(EMPTY_CREATE);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [creating, setCreating] = useState(false);
   const [busyUsername, setBusyUsername] = useState(null);
 
@@ -28,16 +29,44 @@ export default function InspectorAccounts() {
 
   function load() {
     setLoading(true);
-    adminApi.listInspectors().then(setInspectors).finally(() => setLoading(false));
+    adminApi
+      .listInspectors()
+      .then((rows) => setInspectors(rows ?? []))
+      .catch(() => setActionError("載入稽查員名單失敗，請重新整理。"))
+      .finally(() => setLoading(false));
   }
 
   useEffect(load, []);
 
+  async function handleDelete(inspector) {
+    setActionError("");
+    if (
+      !window.confirm(
+        `確定要刪除稽查員「${inspector.display_name}（${inspector.username}）」嗎？此動作無法復原。`
+      )
+    ) {
+      return;
+    }
+    setBusyUsername(inspector.username);
+    try {
+      await adminApi.deleteInspector(inspector.username);
+      load();
+    } catch (err) {
+      setActionError(errText(err, "刪除失敗"));
+    } finally {
+      setBusyUsername(null);
+    }
+  }
+
   async function handleToggle(inspector) {
     setBusyUsername(inspector.username);
+    setActionError("");
     try {
       await adminApi.updateInspector(inspector.username, { has_permission: !inspector.has_permission });
       load();
+    } catch (err) {
+      // Previously a failed permission toggle was swallowed with no feedback.
+      setActionError(errText(err, "更新權限失敗，請稍後再試。"));
     } finally {
       setBusyUsername(null);
     }
@@ -87,6 +116,8 @@ export default function InspectorAccounts() {
         </span>
         <h2>稽查員帳號權限管理</h2>
       </div>
+
+      {actionError && <div className="error-box">{actionError}</div>}
 
       {loading ? (
         <Spinner label="載入中…" />
@@ -148,6 +179,13 @@ export default function InspectorAccounts() {
                         </button>
                         <button className="btn-secondary" onClick={() => startEdit(i)}>
                           <Pencil size={13} /> 編輯
+                        </button>
+                        <button
+                          className="btn-danger"
+                          disabled={busyUsername === i.username}
+                          onClick={() => handleDelete(i)}
+                        >
+                          <Trash2 size={13} /> 刪除
                         </button>
                       </div>
                     </td>

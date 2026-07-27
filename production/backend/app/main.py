@@ -30,10 +30,12 @@ Endpoints:
   GET  /api/admin/cases/{id}          - single case detail [manager]
   POST /api/admin/cases/{id}/review   - record a review decision [manager]
   GET  /api/admin/stats               - aggregate statistics [manager]
-  GET  /api/admin/export.csv          - CSV export of all cases [manager]
+  GET  /api/admin/export.csv          - CSV export of cases (optional filters) [manager]
+  GET  /api/admin/export.xlsx         - Excel export of cases (optional filters) [manager]
   GET  /api/admin/inspectors          - list inspector accounts [sysadmin]
   POST /api/admin/inspectors          - create an inspector account [sysadmin]
   PATCH /api/admin/inspectors/{username} - update permission/name/password [sysadmin]
+  DELETE /api/admin/inspectors/{username} - delete an inspector account [sysadmin]
   GET  /api/admin/admins              - list admin (manager/sysadmin) accounts [sysadmin]
   POST /api/admin/admins              - create an admin account [sysadmin]
   PATCH /api/admin/admins/{username}  - update name/role/password/active [sysadmin]
@@ -41,6 +43,8 @@ Endpoints:
   GET  /api/admin/locations           - flat list of parking spots [sysadmin]
   POST /api/admin/locations           - add a parking spot [sysadmin]
   DELETE /api/admin/locations/{id}    - remove a parking spot [sysadmin]
+  GET  /api/admin/import/templates/{type} - download Excel import template [sysadmin]
+  POST /api/admin/import/{type}       - bulk import from Excel (.xlsx) [sysadmin]
   GET  /api/admin/settings            - current system settings [sysadmin]
   PUT  /api/admin/settings            - update system settings [sysadmin]
 """
@@ -55,16 +59,19 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import business_rules as rules
 from . import qr_service
+from .import_service import IMPORT_TYPES, build_template_workbook, run_import
+from .clock import local_now_iso
 from .config import get_settings
 from .media import validate_photo
 from .db import get_db, get_setting, init_db, set_setting
@@ -76,10 +83,10 @@ from .security import (
     Principal,
     create_access_token,
     hash_password,
+    password_matches,
     require_inspector,
     require_manager,
     require_sysadmin,
-    verify_password,
 )
 from .rate_limit import login_throttle
 from .seed import QR_DEMO_CODES, seed
@@ -111,7 +118,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Parking Ticket Inspection API", lifespan=lifespan)
+# The interactive docs (/docs, /redoc, /openapi.json) enumerate every endpoint
+# and schema. Useful in dev; unnecessary attack surface on a public gov deploy,
+# so switch them off in production.
+_docs_kwargs = (
+    {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    if settings.is_production
+    else {}
+)
+app = FastAPI(title="Parking Ticket Inspection API", lifespan=lifespan, **_docs_kwargs)
 
 # CORS: explicit allow-list (Goal 3). No wildcard. Bearer tokens are sent in
 # the Authorization header (not cookies), so credentials are not required.
@@ -140,9 +155,19 @@ async def _security_headers(request: Request, call_next):
 # --------------------------------------------------------------------------
 # Schemas
 # --------------------------------------------------------------------------
+# Length caps on the credential fields bound the size of an unauthenticated
+# request body and, crucially, the size of the login-throttle key derived from
+# the username — without a cap, a flood of huge unique usernames could bloat the
+# in-memory throttle store (see app/rate_limit.py).
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(max_length=150)
+    password: str = Field(max_length=1024)
+
+
+class QrScanRequest(BaseModel):
+    # Raw decoded QR content: a demo code (QR-A1001…) or a query-site URL. Capped
+    # so a scanned blob can't push an unbounded string through the resolver.
+    qr_code: str = Field(default="", max_length=4096)
 
 
 class CasePreviewRequest(BaseModel):
@@ -175,8 +200,8 @@ class CaseCreateRequest(BaseModel):
 
 
 class AdminLoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(max_length=150)
+    password: str = Field(max_length=1024)
 
 
 class ReviewRequest(BaseModel):
@@ -327,7 +352,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 
     row = db.scalar(select(Inspector).where(Inspector.username == payload.username))
 
-    if row is None or not verify_password(payload.password, row.password):
+    if not password_matches(payload.password, row.password if row else None):
         for k in keys:
             login_throttle.record_failure(k)
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
@@ -377,14 +402,14 @@ def get_locations(
 # QR scan -> resolve ticket data from the (external) query site
 # --------------------------------------------------------------------------
 @app.post("/api/qr/scan")
-def scan_qr(payload: dict, principal: Principal = Depends(require_active_inspector)):
+def scan_qr(payload: QrScanRequest, principal: Principal = Depends(require_active_inspector)):
     """Resolve a scanned QR code into ticket data.
 
     `qr_code` is the raw decoded QR content: either a built-in demo code
     (QR-A1001 ...) or a real URL to the query site. See app/qr_service.py for
     the resolution + SSRF rules.
     """
-    return qr_service.resolve((payload or {}).get("qr_code", ""))
+    return qr_service.resolve(payload.qr_code)
 
 
 # A local stand-in for the external '查詢網站', so the real fetch-and-parse path
@@ -450,7 +475,20 @@ def _run_judgement(db: Session, ticket_no: str, parking_date_str: str, parking_s
     except ValueError as exc:
         return None, f"日期/時間格式錯誤：{exc}"
 
-    issue_dt = rules.compute_issue_datetime(parking_date, parsed)
+    # A timezone-aware parking_start (e.g. "...T09:10:00+08:00") can't be
+    # subtracted from the naive issue datetime we reconstruct from the ticket,
+    # and the ticket may encode an impossible calendar date (e.g. month=2,
+    # day=30 -> ValueError from datetime()). Both used to escape the guards
+    # above and surface as an opaque HTTP 500; treat them as a parse error so
+    # the flow degrades to the existing PARSE_ERROR path instead of crashing.
+    if parking_start.tzinfo is not None:
+        parking_start = parking_start.replace(tzinfo=None)
+
+    try:
+        issue_dt = rules.compute_issue_datetime(parking_date, parsed)
+    except ValueError as exc:
+        return None, f"帳單編號日期無效：{exc}"
+
     threshold = _current_overdue_threshold(db)
     result = rules.judge_time_diff(issue_dt, parking_start, threshold_minutes=threshold)
 
@@ -568,10 +606,22 @@ def create_case(
         photo_path=photo_path,
         status=status,
         synced_offline=int(payload.offline_submitted),
-        created_at=datetime.now().isoformat(timespec="seconds"),
+        created_at=local_now_iso(),
     )
     db.add(case)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        # The photo was written to disk before this commit; if the row didn't
+        # persist, delete the now-orphaned file so /uploads doesn't accumulate
+        # images with no owning case.
+        db.rollback()
+        if photo_path:
+            try:
+                (UPLOADS_DIR / photo_path.rsplit("/", 1)[-1]).unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
     db.refresh(case)
     return row_to_dict(case)
 
@@ -610,7 +660,7 @@ def admin_login(payload: AdminLoginRequest, request: Request, db: Session = Depe
 
     row = db.scalar(select(AdminUser).where(AdminUser.username == payload.username))
 
-    if row is None or not verify_password(payload.password, row.password):
+    if not password_matches(payload.password, row.password if row else None):
         for k in keys:
             login_throttle.record_failure(k)
         raise HTTPException(status_code=401, detail="帳號或密碼錯誤")
@@ -646,30 +696,16 @@ def admin_list_cases(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_active_manager),
 ):
-    stmt = select(Case)
-
-    if status:
-        statuses = [s.strip() for s in status.split(",") if s.strip()]
-        if statuses:
-            stmt = stmt.where(Case.status.in_(statuses))
-    if judgement:
-        stmt = stmt.where(Case.judgement == judgement)
-    if duplicate_warning is not None:
-        stmt = stmt.where(Case.duplicate_warning == int(duplicate_warning))
-    if review_required is not None:
-        stmt = stmt.where(Case.review_required == int(review_required))
-    if district:
-        stmt = stmt.where(Case.district == district)
-    if inspector:
-        stmt = stmt.where(Case.inspector_username == inspector)
-    if date:
-        # created_at is stored as an ISO string ("2026-07-02T10:20:00"), so a
-        # day filter is a prefix match.
-        stmt = stmt.where(Case.created_at.like(f"{date}%"))
-    if q:
-        like = f"%{q}%"
-        stmt = stmt.where(or_(Case.ticket_no.like(like), Case.plate_no.like(like)))
-
+    stmt = _admin_cases_filtered_stmt(
+        status=status,
+        judgement=judgement,
+        duplicate_warning=duplicate_warning,
+        review_required=review_required,
+        district=district,
+        inspector=inspector,
+        date=date,
+        q=q,
+    )
     stmt = stmt.order_by(Case.id.desc()).limit(500)
     rows = db.scalars(stmt).all()
     return [row_to_dict(r) for r in rows]
@@ -713,7 +749,7 @@ def admin_review_case(
     case.review_note = payload.note
     # Record the authenticated admin as the reviewer, not a client-supplied name.
     case.reviewed_by = principal.username
-    case.reviewed_at = datetime.now().isoformat(timespec="seconds")
+    case.reviewed_at = local_now_iso()
     case.status = new_status
     db.commit()
     db.refresh(case)
@@ -774,6 +810,20 @@ def admin_update_case(
         db.scalar(select(Case).where(Case.ticket_no == case.ticket_no, Case.id != case_id))
         is not None
     )
+
+    # If the edit turned an already-closed case back into a violation (e.g. a
+    # corrected parking_start now judges OVERDUE, or the new ticket number
+    # collides), re-open it into the review queue — otherwise the problem the
+    # edit just surfaced would never be reviewed. We only *escalate* here:
+    # de-escalating a case that's under review stays the reviewer's decision, so
+    # data-source/manual-entry review reasons (a creation-time concern) don't
+    # re-trigger on every admin edit.
+    reviewable_now = case.judgement in ("OVERDUE", "DATA_ERROR", "PARSE_ERROR") or bool(
+        case.duplicate_warning
+    )
+    if reviewable_now and case.status == "CLOSED":
+        case.status = "REVIEW_REQUIRED"
+        case.review_required = 1
 
     db.commit()
     db.refresh(case)
@@ -987,34 +1037,124 @@ def _inspection_time(created_at: str) -> str:
     return f"{dt.hour:02d}:{dt.minute:02d}"
 
 
+def _admin_cases_filtered_stmt(
+    status: Optional[str] = None,
+    judgement: Optional[str] = None,
+    duplicate_warning: Optional[bool] = None,
+    review_required: Optional[bool] = None,
+    district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,
+    q: Optional[str] = None,
+):
+    stmt = select(Case)
+
+    if status:
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        if statuses:
+            stmt = stmt.where(Case.status.in_(statuses))
+    if judgement:
+        stmt = stmt.where(Case.judgement == judgement)
+    if duplicate_warning is not None:
+        stmt = stmt.where(Case.duplicate_warning == int(duplicate_warning))
+    if review_required is not None:
+        stmt = stmt.where(Case.review_required == int(review_required))
+    if district:
+        stmt = stmt.where(Case.district == district)
+    if inspector:
+        stmt = stmt.where(Case.inspector_username == inspector)
+    if date:
+        # created_at is stored as an ISO string ("2026-07-02T10:20:00"), so a
+        # day filter is a prefix match.
+        stmt = stmt.where(Case.created_at.like(f"{date}%"))
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(or_(Case.ticket_no.like(like), Case.plate_no.like(like)))
+
+    return stmt
+
+
+def _inspector_display_names(db: Session) -> dict[str, str]:
+    return {
+        i.username: i.display_name for i in db.scalars(select(Inspector)).all()
+    }
+
+
+def _export_row_values(case: Case, name_by_username: dict[str, str]) -> list:
+    g, h, i, j = _split_ticket_no(case.ticket_no)
+    return [
+        _inspection_date(case.created_at),
+        _inspection_time(case.created_at),
+        name_by_username.get(case.inspector_username, case.inspector_username),
+        case.road or "",
+        case.spot_no or "",
+        case.plate_no or "",
+        g,
+        h,
+        i,
+        j,
+        "",
+        "",
+        "",
+    ]
+
+
+def _fetch_export_cases(
+    db: Session,
+    status: Optional[str] = None,
+    judgement: Optional[str] = None,
+    duplicate_warning: Optional[bool] = None,
+    review_required: Optional[bool] = None,
+    district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,
+    q: Optional[str] = None,
+) -> tuple[list[Case], dict[str, str]]:
+    stmt = _admin_cases_filtered_stmt(
+        status=status,
+        judgement=judgement,
+        duplicate_warning=duplicate_warning,
+        review_required=review_required,
+        district=district,
+        inspector=inspector,
+        date=date,
+        q=q,
+    )
+    cases = db.scalars(stmt.order_by(Case.id)).all()
+    return cases, _inspector_display_names(db)
+
+
 @app.get("/api/admin/export.csv")
 def admin_export_csv(
+    status: Optional[str] = None,
+    judgement: Optional[str] = None,
+    duplicate_warning: Optional[bool] = None,
+    review_required: Optional[bool] = None,
+    district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,
+    q: Optional[str] = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_active_manager),
 ):
-    rows = db.scalars(select(Case).order_by(Case.id)).all()
-    name_by_username = {
-        i.username: i.display_name for i in db.scalars(select(Inspector)).all()
-    }
+    cases, name_by_username = _fetch_export_cases(
+        db,
+        status=status,
+        judgement=judgement,
+        duplicate_warning=duplicate_warning,
+        review_required=review_required,
+        district=district,
+        inspector=inspector,
+        date=date,
+        q=q,
+    )
 
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(CSV_HEADER_NAMES)
     writer.writerow(CSV_HEADER_NOTES)
-    for c in rows:
-        g, h, i, j = _split_ticket_no(c.ticket_no)
-        writer.writerow([_csv_safe(v) for v in (
-            _inspection_date(c.created_at),                          # A 日期
-            _inspection_time(c.created_at),                          # B 檢查時間
-            name_by_username.get(c.inspector_username, c.inspector_username),  # C 調查員
-            c.road or "",                                            # D 路段
-            c.spot_no or "",                                         # E 停車格編號
-            c.plate_no or "",                                        # F 車號
-            g, h, i, j,                                              # G-J 條碼下方數字
-            "",                                                      # K 可不用 (保留)
-            "",                                                      # L 費率 (未蒐集)
-            "",                                                      # M 其他 (保留)
-        )])
+    for c in cases:
+        writer.writerow([_csv_safe(v) for v in _export_row_values(c, name_by_username)])
     buf.seek(0)
 
     # Prepend a UTF-8 BOM so Excel opens the Chinese headers correctly.
@@ -1022,6 +1162,50 @@ def admin_export_csv(
         iter(["﻿" + buf.getvalue()]),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=parking_cases_export.csv"},
+    )
+
+
+@app.get("/api/admin/export.xlsx")
+def admin_export_xlsx(
+    status: Optional[str] = None,
+    judgement: Optional[str] = None,
+    duplicate_warning: Optional[bool] = None,
+    review_required: Optional[bool] = None,
+    district: Optional[str] = None,
+    inspector: Optional[str] = None,
+    date: Optional[str] = None,
+    q: Optional[str] = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_manager),
+):
+    from openpyxl import Workbook
+
+    cases, name_by_username = _fetch_export_cases(
+        db,
+        status=status,
+        judgement=judgement,
+        duplicate_warning=duplicate_warning,
+        review_required=review_required,
+        district=district,
+        inspector=inspector,
+        date=date,
+        q=q,
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "案件匯出"
+    ws.append(CSV_HEADER_NAMES)
+    ws.append(CSV_HEADER_NOTES)
+    for c in cases:
+        ws.append([_csv_safe(v) for v in _export_row_values(c, name_by_username)])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=parking_cases_export.xlsx"},
     )
 
 
@@ -1059,7 +1243,14 @@ def admin_create_inspector(
             has_permission=int(payload.has_permission),
         )
     )
-    db.commit()
+    # The check above races another create of the same username; the DB unique
+    # constraint is the real guard, so translate its violation into the same
+    # 409 rather than letting it surface as an opaque 500.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="帳號已存在")
     return {
         "username": payload.username,
         "display_name": payload.display_name,
@@ -1092,6 +1283,33 @@ def admin_update_inspector(
         "display_name": row.display_name,
         "has_permission": row.has_permission,
     }
+
+
+def _inspector_case_count(db: Session, username: str) -> int:
+    return db.scalar(
+        select(func.count()).select_from(Case).where(Case.inspector_username == username)
+    ) or 0
+
+
+@app.delete("/api/admin/inspectors/{username}")
+def admin_delete_inspector(
+    username: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    row = db.scalar(select(Inspector).where(Inspector.username == username))
+    if not row:
+        raise HTTPException(status_code=404, detail="帳號不存在")
+
+    if _inspector_case_count(db, row.username) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="此稽查員已有案件紀錄，無法刪除。請改為取消權限。",
+        )
+
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------------
@@ -1172,11 +1390,15 @@ def admin_create_admin(
         display_name=display_name,
         role=role,
         is_active=1,
-        created_at=datetime.now().isoformat(timespec="seconds"),
+        created_at=local_now_iso(),
         created_by=principal.username,
     )
     db.add(row)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="帳號已存在")
     db.refresh(row)
     return _serialize_admin(row)
 
@@ -1285,7 +1507,13 @@ def admin_create_location(
         raise HTTPException(status_code=409, detail="此停車格已存在")
     location = Location(district=payload.district, road=payload.road, spot_no=payload.spot_no)
     db.add(location)
-    db.commit()
+    # The uq_location_spot constraint is the authoritative guard; the check
+    # above can race, so map its violation to the same 409.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="此停車格已存在")
     db.refresh(location)
     return {
         "id": location.id,
@@ -1293,6 +1521,18 @@ def admin_create_location(
         "road": location.road,
         "spot_no": location.spot_no,
     }
+
+
+def _location_case_count(db: Session, location: Location) -> int:
+    return db.scalar(
+        select(func.count())
+        .select_from(Case)
+        .where(
+            Case.district == location.district,
+            Case.road == location.road,
+            Case.spot_no == location.spot_no,
+        )
+    ) or 0
 
 
 @app.delete("/api/admin/locations/{location_id}")
@@ -1304,9 +1544,63 @@ def admin_delete_location(
     location = db.get(Location, location_id)
     if location is None:
         raise HTTPException(status_code=404, detail="找不到該筆資料")
+
+    if _location_case_count(db, location) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="此停車格已有案件紀錄，無法刪除。",
+        )
+
     db.delete(location)
     db.commit()
     return {"ok": True}
+
+
+def _validate_import_type(import_type: str) -> str:
+    key = (import_type or "").strip().lower()
+    if key not in IMPORT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="匯入類型必須為 locations 或 inspectors",
+        )
+    return key
+
+
+@app.get("/api/admin/import/templates/{import_type}")
+def admin_import_template(
+    import_type: str,
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    key = _validate_import_type(import_type)
+    content = build_template_workbook(key)
+    filename = "parking_locations_import_template.xlsx" if key == "locations" else "parking_inspectors_import_template.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.post("/api/admin/import/{import_type}")
+async def admin_import_excel(
+    import_type: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_active_sysadmin),
+):
+    key = _validate_import_type(import_type)
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="僅支援 .xlsx 格式")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上傳的檔案是空的")
+
+    result, error = run_import(db, key, content)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return result.to_dict()
 
 
 @app.get("/api/admin/settings")

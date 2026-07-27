@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:public": "vite build --config vite.public.config.js",
+    "build:admin": "vite build --config vite.admin.config.js",
     "lint": "oxlint",
     "preview": "vite preview",
     "generate-demo-qr": "node scripts/generate-demo-qr.mjs"

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   X, FileWarning, CheckCircle2, AlertTriangle, MessageSquareWarning, BadgeCheck, XCircle,
   HelpCircle, Loader2, Send, Pencil, Trash2, Save,
@@ -51,6 +51,17 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
 
   const judge = JUDGE_LABEL[caseData.judgement] ?? { text: caseData.judgement, cls: "pill-neutral" };
   const canReview = mode === "review" && ["REVIEW_REQUIRED", "REVIEW_NEED_INFO"].includes(caseData.status);
+
+  // Escape closes the drawer, but not while a mutation is in flight or the user
+  // is mid-edit (avoid discarding unsaved field changes on a stray keypress).
+  const busy = submitting || saving || deleting;
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape" && !editing && !busy) onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, busy, onClose]);
 
   async function handleSubmitReview() {
     if (!outcome) {
@@ -114,9 +125,15 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
 
   return (
     <div className="modal-overlay modal-overlay-drawer" onClick={onClose}>
-      <div className="modal-card modal-card-lg" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-card modal-card-lg"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="case-detail-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-card-header">
-          <h2>案件詳情 #{caseData.id}{editing ? "（編輯中）" : ""}</h2>
+          <h2 id="case-detail-title">案件詳情 #{caseData.id}{editing ? "（編輯中）" : ""}</h2>
           <button className="btn-ghost btn-icon-only" onClick={onClose}>
             <X size={16} />
           </button>
@@ -227,11 +244,10 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
         )}
 
         {/* Manager record management: edit / delete. */}
-        <div className="button-row" style={{ justifyContent: "space-between", marginTop: 16 }}>
+        <div className="button-row button-row-split">
           {editing ? (
             <>
-              <span />
-              <div style={{ display: "flex", gap: 10 }}>
+              <div className="button-group">
                 <button className="btn-secondary" disabled={saving} onClick={() => { setEditing(false); setError(""); }}>
                   取消
                 </button>
@@ -249,7 +265,7 @@ export default function CaseDetailPanel({ caseData, mode, adminUsername, onClose
                 {deleting ? <Loader2 size={15} className="spin-icon" /> : <Trash2 size={15} />}
                 {deleting ? "刪除中…" : "刪除案件"}
               </button>
-              <div style={{ display: "flex", gap: 10 }}>
+              <div className="button-group">
                 <button className="btn-secondary" onClick={() => setEditing(true)}>
                   <Pencil size={15} /> 編輯資料
                 </button>

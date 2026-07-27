@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ShieldHalf, AlertCircle, LogIn, Loader2, ParkingCircle } from "lucide-react";
-import { adminApi, ApiError } from "../../api";
+import { AlertCircle, LogIn, Loader2 } from "lucide-react";
+import AppLogo from "../../components/AppLogo";
+import { adminApi, loginErrorMessage } from "../../api";
 
 export default function AdminLogin({ onLoggedIn }) {
   const [username, setUsername] = useState("");
@@ -16,11 +17,7 @@ export default function AdminLogin({ onLoggedIn }) {
       const res = await adminApi.login(username, password);
       onLoggedIn(res.admin);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setError("帳號或密碼錯誤");
-      } else {
-        setError("無法連線到後端 API，請確認後端服務已啟動 (http://localhost:8000)");
-      }
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -30,9 +27,7 @@ export default function AdminLogin({ onLoggedIn }) {
     <div className="app-shell centered">
       <div className="card" style={{ maxWidth: 380, width: "100%" }}>
         <div className="card-icon-heading">
-          <span className="icon-badge">
-            <ShieldHalf size={20} />
-          </span>
+          <AppLogo size={40} className="brand-logo" />
           <h1 style={{ fontSize: 19 }}>後台管理系統</h1>
         </div>
         <p className="muted small" style={{ marginTop: -8 }}>管理人員 / 系統管理員登入</p>
@@ -56,13 +51,12 @@ export default function AdminLogin({ onLoggedIn }) {
             {loading ? "登入中…" : "登入"}
           </button>
         </form>
-        <p className="hint">
-          Demo 帳號：<code>manager01</code> / <code>manager123</code>（管理人員）、
-          <code>sysadmin01</code> / <code>sysadmin123</code>（系統管理員）
-        </p>
-        <a className="btn-link app-switch-link" href="/">
-          <ParkingCircle size={13} /> 前往稽查員 APP
-        </a>
+        {import.meta.env.DEV && (
+          <p className="hint">
+            Demo 帳號：<code>manager01</code> / <code>manager123</code>（管理人員）、
+            <code>sysadmin01</code> / <code>sysadmin123</code>（系統管理員）
+          </p>
+        )}
       </div>
     </div>
   );

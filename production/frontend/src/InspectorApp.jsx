@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ParkingCircle, LogOut, ArrowLeft, Save, Loader2, PartyPopper, ListChecks, ShieldHalf } from "lucide-react";
+import { LogOut, ArrowLeft, Save, Loader2, PartyPopper, ListChecks } from "lucide-react";
+import AppLogo from "./components/AppLogo";
 import "./styles.css";
-import { api, ApiError, clearAuthToken } from "./api";
+import { api, ApiError, clearInspectorSession, loadInspectorSession } from "./api";
 import { loadQueue, enqueue, removeFromQueue } from "./offlineQueue";
 
 import Login from "./components/Login";
@@ -48,6 +49,7 @@ const emptyDraft = () => ({
 });
 
 export default function InspectorApp() {
+  const [booting, setBooting] = useState(true);
   const [inspector, setInspector] = useState(null);
   const [step, setStep] = useState("login");
   const [draft, setDraft] = useState(emptyDraft());
@@ -63,6 +65,7 @@ export default function InspectorApp() {
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [duplicateInfo, setDuplicateInfo] = useState(null);
+  const [duplicateError, setDuplicateError] = useState(null);
   const [saveMessage, setSaveMessage] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   // Furthest wizard step reached for the current case, so the stepper tab bar
@@ -86,6 +89,15 @@ export default function InspectorApp() {
 
   useEffect(() => {
     setQueue(loadQueue());
+  }, []);
+
+  useEffect(() => {
+    const session = loadInspectorSession();
+    if (session?.inspector) {
+      setInspector(session.inspector);
+      setStep("list");
+    }
+    setBooting(false);
   }, []);
 
   // Track real connectivity and auto-flush the offline queue on reconnect.
@@ -134,7 +146,17 @@ export default function InspectorApp() {
     const payload = buildPayload();
 
     if (!online) {
-      enqueue(payload);
+      const item = enqueue(payload);
+      if (!item) {
+        // localStorage quota exceeded (usually a large evidence photo). Don't
+        // pretend it was queued — the inspection would be silently lost.
+        setSaveMessage({
+          type: "error",
+          text: "本機儲存空間不足，無法離線暫存此案件（照片可能過大）。請在恢復網路後再儲存，或移除照片後重試。",
+        });
+        setSaving(false);
+        return; // stay on the save step so the inspector can retry
+      }
       setQueue(loadQueue());
       setSaveMessage({ type: "info", text: "目前無網路，案件已於本機暫存 (PENDING_UPLOAD)，待網路恢復後自動補傳。" });
       setSaving(false);
@@ -148,8 +170,13 @@ export default function InspectorApp() {
       setRefreshKey((k) => k + 1);
       setStep("done");
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setDuplicateInfo(err.payload.existing_case);
+      // A 409 carries the existing case for the duplicate dialog — but only if
+      // the payload has the expected shape. If it doesn't (e.g. a string
+      // detail), fall back to a visible error rather than opening an empty modal.
+      const existing = err instanceof ApiError && err.status === 409 ? err.payload?.existing_case : null;
+      if (existing) {
+        setDuplicateError(null);
+        setDuplicateInfo(existing);
       } else {
         setSaveMessage({ type: "error", text: "儲存失敗，請稍後再試。" });
       }
@@ -160,6 +187,7 @@ export default function InspectorApp() {
 
   async function handleSaveAnyway() {
     setSaving(true);
+    setDuplicateError(null);
     try {
       const saved = await api.createCase({ ...buildPayload(), save_anyway: true });
       setSaveMessage({ type: "success", text: `已標記 DUPLICATE_WARNING 並儲存，狀態：${saved.status}` });
@@ -167,7 +195,9 @@ export default function InspectorApp() {
       setRefreshKey((k) => k + 1);
       setStep("done");
     } catch {
-      setSaveMessage({ type: "error", text: "儲存失敗，請稍後再試。" });
+      // Keep the modal open and show the error inside it — the previous code set
+      // a message that only ever rendered on the (never-reached) done screen.
+      setDuplicateError("儲存失敗，請稍後再試。");
     } finally {
       setSaving(false);
     }
@@ -175,9 +205,17 @@ export default function InspectorApp() {
 
   function handleCancelDuplicate() {
     setDuplicateInfo(null);
+    setDuplicateError(null);
     setSaveMessage({ type: "info", text: "已取消儲存 (CANCELLED)。" });
     setDraft(emptyDraft());
     setStep("list");
+  }
+
+  // Manually flipping the header toggle back to "online" should also flush the
+  // queue, matching what a real `online` browser event does (Blocker 7 / L3).
+  function handleToggleOnline(next) {
+    setOnline(next);
+    if (next) syncNowRef.current?.();
   }
 
   // Exposed to the network-status listener via a ref (assigned below) so a
@@ -212,13 +250,14 @@ export default function InspectorApp() {
     setStep("qr");
   }
 
+  if (booting) {
+    return null;
+  }
+
   if (step === "login") {
     return (
       <div className="app-shell centered">
         <Login onLoggedIn={(insp) => { setInspector(insp); setStep("permission"); }} />
-        <a className="btn-link app-switch-link" href="/admin">
-          <ShieldHalf size={13} /> 後台管理系統登入
-        </a>
       </div>
     );
   }
@@ -227,9 +266,7 @@ export default function InspectorApp() {
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-icon">
-            <ParkingCircle size={20} />
-          </span>
+          <AppLogo size={36} className="brand-logo" />
           <div>
             <div>停車單稽查 APP</div>
             {inspector && <span className="inspector-name">{inspector.display_name}</span>}
@@ -237,12 +274,9 @@ export default function InspectorApp() {
         </div>
         {inspector && (
           <div className="header-actions">
-            <a className="btn-ghost" href="/admin">
-              <ShieldHalf size={15} /> 後台管理
-            </a>
             <button
               className="btn-ghost"
-              onClick={() => { clearAuthToken(); setInspector(null); setStep("login"); setDraft(emptyDraft()); }}
+              onClick={() => { clearInspectorSession(); setInspector(null); setStep("login"); setDraft(emptyDraft()); }}
             >
               <LogOut size={15} /> 登出
             </button>
@@ -253,7 +287,7 @@ export default function InspectorApp() {
       {inspector && (
         <OfflineBar
           online={online}
-          onToggle={setOnline}
+          onToggle={handleToggleOnline}
           pendingCount={queue.length}
           onSyncNow={handleSyncNow}
           syncing={syncing}
@@ -288,7 +322,17 @@ export default function InspectorApp() {
               {step === "qr" && (
                 <AcquireStep
                   onResult={(res) => {
-                    setDraft((d) => ({ ...d, scanResult: res }));
+                    // Location extracted from the ticket data (QR query page /
+                    // OCR of the paper ticket) pre-fills the 選擇稽查地點 step;
+                    // anything missing stays as-is for the inspector to pick.
+                    const t = res.ticket || {};
+                    setDraft((d) => ({
+                      ...d,
+                      scanResult: res,
+                      district: t.district || d.district,
+                      road: t.road || d.road,
+                      spot_no: t.spot_no || d.spot_no,
+                    }));
                     setStep("location");
                   }}
                   onManualFallback={() => {
@@ -303,6 +347,11 @@ export default function InspectorApp() {
                   initialDistrict={draft.district}
                   initialRoad={draft.road}
                   initialSpot={draft.spot_no}
+                  prefilledFromTicket={Boolean(
+                    draft.scanResult?.ticket?.district ||
+                      draft.scanResult?.ticket?.road ||
+                      draft.scanResult?.ticket?.spot_no
+                  )}
                   onBack={() => setStep("qr")}
                   onSelected={(loc) => {
                     setDraft((d) => ({ ...d, ...loc }));
@@ -362,6 +411,9 @@ export default function InspectorApp() {
                     <li><span>資料來源</span><span>{sourceLabel(draft.scanResult.dataSource)}{draft.manualCorrected ? " (稽查員已修正)" : ""}</span></li>
                     <li><span>目前網路狀態</span><span>{online ? "有網路" : "無網路（將離線暫存）"}</span></li>
                   </ul>
+                  {saveMessage && saveMessage.type === "error" && (
+                    <div className={`info-box ${saveMessage.type}`}>{saveMessage.text}</div>
+                  )}
                   <div className="button-row">
                     <button className="btn-secondary" onClick={() => setStep("photo")}>
                       <ArrowLeft size={15} /> 返回
@@ -402,6 +454,7 @@ export default function InspectorApp() {
         <DuplicateModal
           existingCase={duplicateInfo}
           saving={saving}
+          error={duplicateError}
           onSaveAnyway={handleSaveAnyway}
           onCancel={handleCancelDuplicate}
         />

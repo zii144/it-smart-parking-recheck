@@ -9,13 +9,17 @@ invoking Alembic.
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.schema import CreateColumn
 
 from .config import get_settings
 from .models import Base, Setting
+
+logger = logging.getLogger("parking.db")
 
 settings = get_settings()
 
@@ -51,6 +55,34 @@ def init_db() -> None:
     local SQLite runs don't require an alembic invocation.
     """
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
+
+
+def _add_missing_columns() -> None:
+    """create_all creates missing *tables* but never ALTERs existing ones, so a
+    dev database created before a model gained a column keeps the old shape and
+    the first query touching the new column dies with "no such column" - which
+    the UI then reports as a misleading connection error. Bring the live schema
+    up to the models by adding whatever columns are missing; each is rendered
+    with its server_default, matching what the corresponding Alembic migration
+    does in real deployments. (Dropped/renamed/retyped columns still need a
+    real migration or `./dev.sh reset-db` - additive drift is by far the common
+    case, and the only one that can be healed safely in place.)
+    """
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        for table in Base.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                continue
+            existing = {col["name"] for col in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                ddl = CreateColumn(column).compile(dialect=conn.dialect)
+                conn.exec_driver_sql(f'ALTER TABLE "{table.name}" ADD COLUMN {ddl}')
+                logger.warning(
+                    "dev schema drift healed: added column %s.%s", table.name, column.name
+                )
 
 
 def get_setting(db: Session, key: str, default: str | None = None) -> str | None:

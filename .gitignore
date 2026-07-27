@@ -2,6 +2,14 @@
 .DS_Store
 **/.DS_Store
 
+# Only .github/ is a real dot-directory for this repo — everything else
+# starting with a dot (.claude/, superpowers state, editor/tool state, etc.)
+# is local tooling, never committed.
+.*/
+!/.github/
+CLAUDE.md
+skills-lock.json
+
 # Production secrets — never commit (see deploy/.env.production.example)
 deploy/.env.production
 target-sample/

@@ -12,7 +12,7 @@ Alembic autogenerates migrations from.
 """
 from __future__ import annotations
 
-from sqlalchemy import Float, Integer, String, Text
+from sqlalchemy import Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -61,6 +61,13 @@ class Setting(Base):
 
 class Location(Base):
     __tablename__ = "locations"
+    # A parking spot is uniquely identified by (district, road, spot_no). The
+    # DB-level constraint makes the "此停車格已存在" guarantee real even under
+    # concurrent creates, where the check-then-insert guard in the endpoint
+    # would otherwise race and double-insert.
+    __table_args__ = (
+        UniqueConstraint("district", "road", "spot_no", name="uq_location_spot"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     district: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -73,7 +80,7 @@ class Case(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ticket_no: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    district: Mapped[str | None] = mapped_column(String(64))
+    district: Mapped[str | None] = mapped_column(String(64), index=True)
     road: Mapped[str | None] = mapped_column(String(128))
     spot_no: Mapped[str | None] = mapped_column(String(64))
     # Auxiliary GPS captured on the device when the location was selected
@@ -90,23 +97,23 @@ class Case(Base):
     data_source: Mapped[str] = mapped_column(String(32), nullable=False)
     manual_corrected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     original_values: Mapped[str | None] = mapped_column(Text)  # JSON snapshot
-    inspector_username: Mapped[str | None] = mapped_column(String(64))
+    inspector_username: Mapped[str | None] = mapped_column(String(64), index=True)
     issue_datetime: Mapped[str | None] = mapped_column(String(32))
     time_diff_minutes: Mapped[float | None] = mapped_column(Float)
     # COMPLIANT | OVERDUE | DATA_ERROR | PARSE_ERROR
-    judgement: Mapped[str | None] = mapped_column(String(32))
+    judgement: Mapped[str | None] = mapped_column(String(32), index=True)
     review_required: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     duplicate_warning: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     photo_path: Mapped[str | None] = mapped_column(String(255))
     # REVIEW_REQUIRED | REVIEW_NEED_INFO | CLOSED
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     synced_offline: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # DATA_ERROR | DUPLICATE | NEED_INFO | CONFIRMED | DISMISSED
     review_outcome: Mapped[str | None] = mapped_column(String(32))
     review_note: Mapped[str | None] = mapped_column(Text)
     reviewed_by: Mapped[str | None] = mapped_column(String(64))
     reviewed_at: Mapped[str | None] = mapped_column(String(32))
-    created_at: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
 
 
 def row_to_dict(obj: Base) -> dict:
