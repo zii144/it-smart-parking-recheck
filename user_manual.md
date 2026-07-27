@@ -80,15 +80,16 @@ Compose services defined in `deploy/docker-compose.prod.yml`:
 | `edge-proxy` | fail-closed allow-list nginx | `127.0.0.1:8090` on the VM → Tailscale Funnel → public internet |
 | `frontend` | admin-only nginx + static bundle | `:8080` — only the hypervisor/colocated VMs today; see §2 |
 
-Plus two things outside Docker on the VM itself:
+Plus, outside Docker/this repo's own compose stack but on the same VM:
 - **Tailscale**, joined to tailnet `tail176472`, running `tailscale funnel --bg 8090` — this is
   what makes `edge-proxy` (and therefore the public API) reachable from the internet.
+- **Uptime Kuma**, a separate Compose project (`deploy/monitoring/docker-compose.yml`, project
+  name `parking-monitoring`, deployed at `/opt/monitoring` on the VM — deliberately isolated
+  from the app's own `parking-prod` project so redeploying one never touches the other). See
+  §3.8.
+- **Nightly backup cron** (`/etc/cron.d/parking-backup`, installed from
+  `deploy/scripts/parking-backup.cron`) running `deploy/scripts/backup.sh`. See §3.9.
 - Nothing else — the public *frontend* bundle isn't hosted here at all; it's on Cloudflare Pages.
-
-Also running, outside this repo's compose stack but on the same VM: a dedicated Uptime Kuma
-instance (`/opt/monitoring`, port 3001) and a nightly backup cron — these were set up as part of
-the same DevOps rollout but their config isn't in this repo's git history yet (still sandbox-only
-as of this writing; see §3.7).
 
 ### 3.2 Common operator commands
 
@@ -217,7 +218,51 @@ the failed redirect URL from your browser's address bar and `curl` it directly a
 `localhost:8976` on the remote host to complete the handshake manually. There's no global
 `wrangler` binary installed by default — use `npx wrangler ...`.
 
-### 3.7 Known limitations / open items
+### 3.8 Observability (Uptime Kuma)
+
+```bash
+# Bring it up (first time, or after a config change):
+docker compose -f deploy/monitoring/docker-compose.yml up -d
+```
+
+Dashboard: `http://192.168.122.13:3001` — same reachability rules as the admin frontend (§2):
+hypervisor/colocated VMs or the tailnet, no public exposure. 5 monitors are configured directly
+in Kuma's own database (not declarative — Kuma has no "monitors as code" import from this repo),
+covering the HTTP health endpoint plus one Docker-container check per `parking-prod` service
+(`db`, `backend`, `frontend`, `edge-proxy`). If this instance is ever rebuilt from scratch, those
+monitors need re-creating by hand (or via Kuma's Socket.IO API — see the sandbox project's
+`runbooks/phase-3-observability/03-configure-monitors-and-alerts.md` for how that was scripted
+the first time). No notification channel is configured — dashboard-only, by choice.
+
+### 3.9 Backup & DR
+
+Nightly `pg_dump` + uploads-volume export runs via cron (installed from
+`deploy/scripts/parking-backup.cron` to `/etc/cron.d/parking-backup` on the VM), writing to
+`/opt/parking-backups`. This is a **pull-only** design — `parking-recheck` never holds
+credentials for wherever the backups end up; a separate, restricted `backup-puller` SFTP user
+(chrooted to `/opt/parking-backups`, read-only) is what a remote host uses to fetch them on its
+own schedule, using its own keypair. Local retention here is a flat 7-day window — real
+long-term retention is the pulling side's responsibility, not this VM's.
+
+Installing the cron job (one-time, or after editing `parking-backup.cron`):
+
+```bash
+sudo cp deploy/scripts/parking-backup.cron /etc/cron.d/parking-backup
+sudo chmod 644 /etc/cron.d/parking-backup
+```
+
+Running a backup by hand (e.g. before risky maintenance):
+
+```bash
+BACKUP_DIR=/opt/parking-backups ./deploy/scripts/backup.sh
+```
+
+The `backup-puller` system user/group and its SSH `Match`-block chroot config are provisioned
+outside this repo (they were set up manually/via Ansible in the sandbox project, not something
+`backup.sh` itself creates) — this script assumes that group already exists and silently skips
+the `chgrp` step if it doesn't (safe for local/manual testing).
+
+### 3.10 Known limitations / open items
 
 - **Admin remote-access mechanism is not yet decided** (Tailscale ACL vs. VPN) — currently
   reachable only from the hypervisor host or a colocated VM (see §2). Don't assume any
@@ -225,9 +270,12 @@ the failed redirect URL from your browser's address bar and `curl` it directly a
 - **No real end-to-end browser QR-scan test has been run yet** against the live public path —
   only protocol-level checks (curl, WebFetch, CORS preflight). Worth doing before treating this
   as fully field-verified.
-- **Observability (Uptime Kuma) and backup/DR are running for real on the VM, but their
-  Ansible/compose config is not yet committed to this repo** — they were set up via a sandbox
-  copy of this project and still only exist there in git history. The services themselves are
-  live and VM-level (not tied to which repo owns the CD workflow), so this doesn't affect
-  day-to-day operation — it just means a from-scratch rebuild of this VM wouldn't yet reproduce
-  them from this repo alone.
+- **The Ansible IaC that provisions all of the above from scratch (Docker, firewall, the CD
+  runner, the `backup-puller` account) is not yet committed to this repo** — it exists only in
+  the sandbox project's `ansible/` directory as of this writing. The services it manages are
+  already live and working on this VM regardless (Ansible was used to harden/provision an
+  already-running box, not to bring it up originally), so this doesn't affect day-to-day
+  operation — it just means a genuinely from-scratch rebuild of this VM isn't yet reproducible
+  from this repo alone.
+- **A restore drill (proving a `.215`-pulled backup copy actually restores, not just that file
+  sizes match) hasn't been done.**
