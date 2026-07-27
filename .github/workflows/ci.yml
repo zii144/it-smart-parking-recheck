@@ -128,3 +128,30 @@ jobs:
 
       - name: Scan frontend image
         run: trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 prototype-frontend:latest
+
+  publish:
+    name: Publish images to GHCR
+    if: github.ref == 'refs/heads/main'
+    needs: [backend-tests, backend-migrations, frontend, image-scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (backend)
+        run: |
+          docker build -t ghcr.io/${{ github.repository_owner }}/parking-backend:${{ github.sha }} prototype/backend
+          docker push ghcr.io/${{ github.repository_owner }}/parking-backend:${{ github.sha }}
+
+      - name: Build and push (frontend)
+        run: |
+          docker build -t ghcr.io/${{ github.repository_owner }}/parking-frontend:${{ github.sha }} prototype/frontend
+          docker push ghcr.io/${{ github.repository_owner }}/parking-frontend:${{ github.sha }}
