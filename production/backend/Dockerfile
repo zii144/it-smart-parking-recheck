@@ -10,7 +10,13 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade packaging tooling first, not just app deps: python:3.11-slim ships
+# a stale setuptools/wheel with known CVEs in code that only matters when
+# installing packages (path traversal / arbitrary code execution via a
+# malicious tar/wheel file) — irrelevant at runtime, but real vulnerable
+# code sitting in the image, and Trivy correctly flags it.
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY alembic ./alembic

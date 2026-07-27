@@ -1,4 +1,4 @@
-FROM nginx:1.27-alpine
+FROM nginx:1.30-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 8090
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
