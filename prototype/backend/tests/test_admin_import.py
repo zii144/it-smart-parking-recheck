@@ -118,6 +118,58 @@ def test_import_locations_rejects_non_xlsx(client, sysadmin_token):
     assert res.status_code == 400
 
 
+# --- column width validation ------------------------------------------------
+# SQLite ignores VARCHAR lengths, so these rows would insert fine here and only
+# blow up on the PostgreSQL deployment — as a DataError (not an IntegrityError)
+# escaping mid-loop into a 500, with earlier rows already committed. The parser
+# rejects them up front instead, so behaviour matches on both backends.
+def test_import_reports_overlong_location_fields(client, sysadmin_token):
+    xlsx = _build_xlsx([
+        ["行政區", "路段", "停車格編號"],
+        ["信"* 65, "松高路", "LONG-1"],          # district cap is 64
+        ["信義區", "松"* 129, "LONG-2"],          # road cap is 128
+        ["信義區", "松高路", "短"* 65],            # spot_no cap is 64
+        ["信義區", "松高路", "OK-1"],
+    ])
+    res = _post_import(client, sysadmin_token, xlsx)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["created"] == 1
+    assert [e["row"] for e in body["errors"]] == [2, 3, 4]
+    assert "行政區長度超過 64 字元" == body["errors"][0]["message"]
+    assert "路段長度超過 128 字元" == body["errors"][1]["message"]
+
+    listed = client.get("/api/admin/locations", headers=auth(sysadmin_token)).json()
+    assert not any(len(r["district"]) > 64 or len(r["road"]) > 128 for r in listed)
+
+
+def test_import_reports_overlong_inspector_fields(client, sysadmin_token):
+    xlsx = _build_xlsx([
+        ["帳號", "密碼", "姓名"],
+        ["u" * 65, "secret1", "太長帳號"],
+        ["ok_user", "secret1", "名" * 129],
+        ["good_user", "secret1", "正常"],
+    ])
+    res = _post_import(client, sysadmin_token, xlsx, import_type="inspectors", name="i.xlsx")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["created"] == 1
+    assert [e["message"] for e in body["errors"]] == [
+        "帳號長度超過 64 字元",
+        "姓名長度超過 128 字元",
+    ]
+
+
+def test_import_column_caps_match_the_orm_columns():
+    """Guard against the model widening/narrowing without the caps following."""
+    from app.import_service import INSPECTOR_MAX_LENGTHS, LOCATION_MAX_LENGTHS
+    from app.models import Inspector, Location
+
+    for model, caps in ((Location, LOCATION_MAX_LENGTHS), (Inspector, INSPECTOR_MAX_LENGTHS)):
+        for column, cap in caps.items():
+            assert model.__table__.columns[column].type.length == cap
+
+
 # --- resource limits --------------------------------------------------------
 def test_import_rejects_oversized_upload(client, sysadmin_token, monkeypatch):
     """An .xlsx compresses hard, so bytes-on-the-wire must be capped too."""

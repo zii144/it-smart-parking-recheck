@@ -6,19 +6,40 @@ Column headers accept zh-TW labels or English field names.
 from __future__ import annotations
 
 import io
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 from openpyxl import Workbook, load_workbook
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .models import Inspector, Location
 from .security import hash_password
 
+logger = logging.getLogger("parking.import")
+
 IMPORT_TYPES = frozenset({"locations", "inspectors"})
+
+FIELD_LABELS = {
+    "district": "行政區",
+    "road": "路段",
+    "spot_no": "停車格編號",
+    "username": "帳號",
+    "password": "密碼",
+    "display_name": "姓名",
+}
+
+# Column widths from models.py. SQLite ignores VARCHAR lengths, so an over-long
+# cell only fails on PostgreSQL — and it fails as a DataError, which is *not* an
+# IntegrityError: uncaught, it aborts the import with a 500, leaving the rows
+# committed before it applied and the admin with no report of what landed.
+# Checking here turns that into an ordinary per-row error. VARCHAR(n) counts
+# characters, not bytes, so len() is the right measure.
+LOCATION_MAX_LENGTHS = {"district": 64, "road": 128, "spot_no": 64}
+INSPECTOR_MAX_LENGTHS = {"username": 64, "display_name": 128}
 
 LOCATION_HEADER_MAP = {
     "行政區": "district",
@@ -86,6 +107,13 @@ def _is_example_row(cells: tuple[Any, ...]) -> bool:
 
 def _row_is_empty(cells: tuple[Any, ...]) -> bool:
     return all(not _cell_text(c) for c in cells)
+
+
+def _length_error(values: dict[str, str], caps: dict[str, int]) -> str | None:
+    for key, cap in caps.items():
+        if len(values.get(key, "")) > cap:
+            return f"{FIELD_LABELS[key]}長度超過 {cap} 字元"
+    return None
 
 
 def _parse_permission(value: Any) -> tuple[bool | None, str | None]:
@@ -169,15 +197,7 @@ def parse_workbook_rows(
 
     missing = sorted(required - {k for k in col_keys if k})
     if missing:
-        labels = {
-            "district": "行政區",
-            "road": "路段",
-            "spot_no": "停車格編號",
-            "username": "帳號",
-            "password": "密碼",
-            "display_name": "姓名",
-        }
-        return [], f"缺少必要欄位：{', '.join(labels[k] for k in missing)}"
+        return [], f"缺少必要欄位：{', '.join(FIELD_LABELS[k] for k in missing)}"
 
     if not parsed:
         return [], "沒有可匯入的資料列"
@@ -201,6 +221,27 @@ def build_template_workbook(import_type: str) -> bytes:
     return buf.getvalue()
 
 
+def _commit_row(db: Session, result: ImportResult, row_num: int) -> bool:
+    """Commit one pending row. Returns True if it landed.
+
+    A duplicate is an expected outcome (skip). Anything else is a row we can't
+    write — record it and move on rather than letting it escape as a 500 that
+    leaves the file half-applied with no report.
+    """
+    try:
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+        result.skipped += 1
+        return False
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("import: row %s failed to write", row_num)
+        result.errors.append({"row": row_num, "message": "寫入資料庫失敗，已略過此列"})
+        return False
+
+
 def import_locations(db: Session, rows: list[tuple[int, dict[str, str]]]) -> ImportResult:
     result = ImportResult(import_type="locations", total_rows=len(rows), created=0, skipped=0)
     for row_num, row in rows:
@@ -209,6 +250,13 @@ def import_locations(db: Session, rows: list[tuple[int, dict[str, str]]]) -> Imp
         spot_no = row.get("spot_no", "").strip()
         if not district or not road or not spot_no:
             result.errors.append({"row": row_num, "message": "行政區、路段、停車格編號皆為必填"})
+            continue
+
+        too_long = _length_error(
+            {"district": district, "road": road, "spot_no": spot_no}, LOCATION_MAX_LENGTHS
+        )
+        if too_long:
+            result.errors.append({"row": row_num, "message": too_long})
             continue
 
         existing = db.scalar(
@@ -223,12 +271,8 @@ def import_locations(db: Session, rows: list[tuple[int, dict[str, str]]]) -> Imp
             continue
 
         db.add(Location(district=district, road=road, spot_no=spot_no))
-        try:
-            db.commit()
+        if _commit_row(db, result, row_num):
             result.created += 1
-        except IntegrityError:
-            db.rollback()
-            result.skipped += 1
     return result
 
 
@@ -240,6 +284,13 @@ def import_inspectors(db: Session, rows: list[tuple[int, dict[str, str]]]) -> Im
         display_name = row.get("display_name", "").strip()
         if not username or not password or not display_name:
             result.errors.append({"row": row_num, "message": "帳號、密碼、姓名皆為必填"})
+            continue
+
+        too_long = _length_error(
+            {"username": username, "display_name": display_name}, INSPECTOR_MAX_LENGTHS
+        )
+        if too_long:
+            result.errors.append({"row": row_num, "message": too_long})
             continue
 
         has_permission, perm_err = _parse_permission(row.get("has_permission"))
@@ -260,12 +311,8 @@ def import_inspectors(db: Session, rows: list[tuple[int, dict[str, str]]]) -> Im
                 has_permission=int(has_permission),
             )
         )
-        try:
-            db.commit()
+        if _commit_row(db, result, row_num):
             result.created += 1
-        except IntegrityError:
-            db.rollback()
-            result.skipped += 1
     return result
 
 
