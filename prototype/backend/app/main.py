@@ -1599,9 +1599,18 @@ def admin_import_excel(
     if not filename.endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="僅支援 .xlsx 格式")
 
-    content = file.file.read()
+    # Read one byte past the cap rather than the whole body: Starlette has
+    # already spooled the upload to a temp file, so this is what decides how
+    # much of it we pull into memory (and hand to openpyxl).
+    max_bytes = settings.max_import_bytes
+    content = file.file.read(max_bytes + 1)
     if not content:
         raise HTTPException(status_code=400, detail="上傳的檔案是空的")
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"檔案過大，請將匯入檔控制在 {max_bytes // (1024 * 1024)} MB 以內",
+        )
 
     result, error = run_import(db, key, content)
     if error:

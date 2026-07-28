@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .config import get_settings
 from .models import Inspector, Location
 from .security import hash_password
 
@@ -99,36 +100,71 @@ def _parse_permission(value: Any) -> tuple[bool | None, str | None]:
     return None, f"啟用權限格式無效：{text}（請填 是/否）"
 
 
-def parse_workbook_rows(content: bytes, import_type: str) -> tuple[list[tuple[int, dict[str, str]]], str | None]:
+def parse_workbook_rows(
+    content: bytes,
+    import_type: str,
+    *,
+    max_rows: int | None = None,
+) -> tuple[list[tuple[int, dict[str, str]]], str | None]:
     """Return (rows with 1-based Excel row numbers, fatal parse error)."""
     header_map = LOCATION_HEADER_MAP if import_type == "locations" else INSPECTOR_HEADER_MAP
     required = LOCATION_REQUIRED if import_type == "locations" else INSPECTOR_REQUIRED
+    row_limit = get_settings().max_import_rows if max_rows is None else max_rows
 
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     except Exception:
         return [], "無法讀取 Excel 檔案，請確認格式為 .xlsx"
 
-    ws = wb.active
-    raw_rows = list(ws.iter_rows(values_only=True))
-    if not raw_rows:
+    try:
+        # `active` is None for a workbook whose activeTab points past the last
+        # sheet — a real .xlsx openpyxl loads happily, so treat it as an
+        # unreadable file rather than letting it AttributeError into a 500.
+        ws = wb.active
+        if ws is None:
+            return [], "無法讀取 Excel 檔案，請確認格式為 .xlsx"
+
+        # Stream the sheet instead of list()ing it: a 5 MB workbook can hold
+        # ~500k rows, and materialising those costs ~215 MB before a single
+        # value is validated. Scanning stops at `row_limit` for the same
+        # reason.
+        col_keys: list[str | None] = []
+        header_found = False
+        saw_any_row = False
+        over_limit = False
+        parsed: list[tuple[int, dict[str, str]]] = []
+
+        for row_num, row in enumerate(ws.iter_rows(values_only=True), start=1):
+            if row_num > row_limit:
+                over_limit = True
+                break
+            saw_any_row = True
+            if _row_is_empty(row) or _is_example_row(row):
+                continue
+
+            if not header_found:
+                labels = [_normalize_header(c) for c in row]
+                mapped = [header_map.get(label) for label in labels]
+                if any(k in required for k in mapped if k):
+                    header_found = True
+                    col_keys = mapped
+                continue
+
+            record: dict[str, str] = {}
+            for key, cell in zip(col_keys, row):
+                if key:
+                    record[key] = _cell_text(cell)
+            if any(record.get(k) for k in required):
+                parsed.append((row_num, record))
+    finally:
+        # A read_only workbook holds the underlying zip open until closed.
+        wb.close()
+
+    if over_limit:
+        return [], f"檔案列數超過上限 {row_limit} 列（含標題與空白列），請分批匯入"
+    if not saw_any_row:
         return [], "檔案沒有資料列"
-
-    header_row_idx = None
-    col_keys: list[str | None] = []
-    for idx, row in enumerate(raw_rows):
-        if _row_is_empty(row):
-            continue
-        if _is_example_row(row):
-            continue
-        labels = [_normalize_header(c) for c in row]
-        mapped = [header_map.get(label) for label in labels]
-        if any(k in required for k in mapped if k):
-            header_row_idx = idx
-            col_keys = mapped
-            break
-
-    if header_row_idx is None:
+    if not header_found:
         return [], "找不到有效的欄位標題列（請使用系統提供的範本）"
 
     missing = sorted(required - {k for k in col_keys if k})
@@ -142,19 +178,6 @@ def parse_workbook_rows(content: bytes, import_type: str) -> tuple[list[tuple[in
             "display_name": "姓名",
         }
         return [], f"缺少必要欄位：{', '.join(labels[k] for k in missing)}"
-
-    parsed: list[tuple[int, dict[str, str]]] = []
-    for offset, row in enumerate(raw_rows[header_row_idx + 1 :], start=header_row_idx + 2):
-        if _row_is_empty(row):
-            continue
-        if _is_example_row(row):
-            continue
-        record: dict[str, str] = {}
-        for key, cell in zip(col_keys, row):
-            if key:
-                record[key] = _cell_text(cell)
-        if any(record.get(k) for k in required):
-            parsed.append((offset, record))
 
     if not parsed:
         return [], "沒有可匯入的資料列"
