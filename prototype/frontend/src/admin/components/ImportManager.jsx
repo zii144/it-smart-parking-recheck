@@ -17,6 +17,11 @@ const IMPORT_TYPES = [
   },
 ];
 
+// Mirrors MAX_IMPORT_BYTES in the backend config. Checked here only so an
+// obviously-too-big file fails immediately instead of uploading for 20s and
+// coming back as a timed-out "匯入失敗" — the server is what enforces it.
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+
 function errText(err, fallback) {
   if (err instanceof ApiError) {
     if (typeof err.payload === "string") return err.payload;
@@ -51,6 +56,10 @@ export default function ImportManager() {
     e.preventDefault();
     if (!file) {
       setError("請先選擇 .xlsx 檔案");
+      return;
+    }
+    if (file.size > MAX_IMPORT_BYTES) {
+      setError(`檔案過大（${(file.size / 1024 / 1024).toFixed(1)} MB），請將匯入檔控制在 ${MAX_IMPORT_BYTES / 1024 / 1024} MB 以內，或分批匯入。`);
       return;
     }
     setError("");
@@ -137,10 +146,16 @@ export default function ImportManager() {
             </span>
             <span className="pill pill-neutral">略過 {result.skipped} 筆</span>
             <span className="pill pill-warn">
-              <AlertTriangle size={13} /> 錯誤 {result.errors?.length ?? 0} 列
+              {/* error_count is the true total; `errors` is a capped sample of it. */}
+              <AlertTriangle size={13} /> 錯誤 {result.error_count ?? result.errors?.length ?? 0} 列
             </span>
             <span className="muted small">共處理 {result.total_rows} 列</span>
           </div>
+          {result.errors_truncated && (
+            <p className="muted small">
+              錯誤過多，以下僅列出前 {result.errors.length} 列，請修正後重新匯入。
+            </p>
+          )}
           {result.errors?.length > 0 && (
             <div className="table-scroll">
               <table className="case-table">
