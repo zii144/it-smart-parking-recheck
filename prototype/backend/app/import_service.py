@@ -142,16 +142,11 @@ def _parse_permission(value: Any) -> tuple[bool | None, str | None]:
     return None, f"啟用權限格式無效：{text}（請填 是/否）"
 
 
-def parse_workbook_rows(
-    content: bytes,
-    import_type: str,
-    *,
-    max_rows: int | None = None,
-) -> tuple[list[tuple[int, dict[str, str]]], str | None]:
+def parse_workbook_rows(content: bytes, import_type: str) -> tuple[list[tuple[int, dict[str, str]]], str | None]:
     """Return (rows with 1-based Excel row numbers, fatal parse error)."""
     header_map = LOCATION_HEADER_MAP if import_type == "locations" else INSPECTOR_HEADER_MAP
     required = LOCATION_REQUIRED if import_type == "locations" else INSPECTOR_REQUIRED
-    row_limit = get_settings().max_import_rows if max_rows is None else max_rows
+    row_limit = get_settings().max_import_rows
 
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
