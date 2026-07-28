@@ -84,6 +84,18 @@ class Settings:
             os.environ.get("MAX_UPLOAD_BYTES", str(8 * 1024 * 1024))
         )
 
+        # Excel bulk-import caps. An .xlsx is a zip of XML, so it compresses
+        # hard: a 5 MB upload can carry ~500k rows, which openpyxl expands to
+        # ~215 MB of RAM and ~18s of parsing before a single row is validated.
+        # Both limits bound that work, whether the oversized file is hostile or
+        # just a spreadsheet with a mistyped range.
+        self.max_import_bytes: int = int(
+            os.environ.get("MAX_IMPORT_BYTES", str(5 * 1024 * 1024))
+        )
+        # Rows *scanned* per import, header and blank rows included — that's
+        # what bounds the parse, so it's the honest thing to cap and report.
+        self.max_import_rows: int = int(os.environ.get("MAX_IMPORT_ROWS", "5000"))
+
         # Login throttling (Blocker 4): after `login_max_attempts` failures
         # within `login_window_seconds`, that username/IP is locked out for
         # `login_lockout_seconds`.
