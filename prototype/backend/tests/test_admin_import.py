@@ -160,6 +160,32 @@ def test_import_reports_overlong_inspector_fields(client, sysadmin_token):
     ]
 
 
+def test_import_caps_the_reported_error_list(client, sysadmin_token, monkeypatch):
+    """All-bad files report a usable sample, not one JSON entry per row."""
+    monkeypatch.setattr("app.import_service.MAX_REPORTED_ERRORS", 5)
+    xlsx = _build_xlsx(
+        [["行政區", "路段", "停車格編號"]] + [["", "松高路", f"BAD-{i}"] for i in range(12)]
+    )
+    res = _post_import(client, sysadmin_token, xlsx)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["created"] == 0
+    assert body["error_count"] == 12       # every bad row still counted
+    assert len(body["errors"]) == 5        # but only a sample is returned
+    assert body["errors_truncated"] is True
+
+
+def test_import_error_count_matches_errors_when_untruncated(client, sysadmin_token):
+    xlsx = _build_xlsx([
+        ["行政區", "路段", "停車格編號"],
+        ["", "松高路", "BAD-1"],
+        ["大安區", "敦化南路", "OK-1"],
+    ])
+    body = _post_import(client, sysadmin_token, xlsx).json()
+    assert body["error_count"] == len(body["errors"]) == 1
+    assert body["errors_truncated"] is False
+
+
 def test_import_column_caps_match_the_orm_columns():
     """Guard against the model widening/narrowing without the caps following."""
     from app.import_service import INSPECTOR_MAX_LENGTHS, LOCATION_MAX_LENGTHS

@@ -66,13 +66,25 @@ LOCATION_REQUIRED = frozenset({"district", "road", "spot_no"})
 INSPECTOR_REQUIRED = frozenset({"username", "password", "display_name"})
 
 
+# A file where every row is wrong would otherwise return one JSON entry per row
+# and have the console render a table of all of them. Report enough to fix the
+# file, count the rest.
+MAX_REPORTED_ERRORS = 200
+
+
 @dataclass
 class ImportResult:
     import_type: str
     total_rows: int
     created: int
     skipped: int
+    error_count: int = 0
     errors: list[dict[str, Any]] = field(default_factory=list)
+
+    def add_error(self, row: int, message: str) -> None:
+        self.error_count += 1
+        if len(self.errors) < MAX_REPORTED_ERRORS:
+            self.errors.append({"row": row, "message": message})
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -80,7 +92,9 @@ class ImportResult:
             "total_rows": self.total_rows,
             "created": self.created,
             "skipped": self.skipped,
+            "error_count": self.error_count,
             "errors": self.errors,
+            "errors_truncated": self.error_count > len(self.errors),
         }
 
 
@@ -238,7 +252,7 @@ def _commit_row(db: Session, result: ImportResult, row_num: int) -> bool:
     except SQLAlchemyError:
         db.rollback()
         logger.exception("import: row %s failed to write", row_num)
-        result.errors.append({"row": row_num, "message": "寫入資料庫失敗，已略過此列"})
+        result.add_error(row_num, "寫入資料庫失敗，已略過此列")
         return False
 
 
@@ -249,14 +263,14 @@ def import_locations(db: Session, rows: list[tuple[int, dict[str, str]]]) -> Imp
         road = row.get("road", "").strip()
         spot_no = row.get("spot_no", "").strip()
         if not district or not road or not spot_no:
-            result.errors.append({"row": row_num, "message": "行政區、路段、停車格編號皆為必填"})
+            result.add_error(row_num, "行政區、路段、停車格編號皆為必填")
             continue
 
         too_long = _length_error(
             {"district": district, "road": road, "spot_no": spot_no}, LOCATION_MAX_LENGTHS
         )
         if too_long:
-            result.errors.append({"row": row_num, "message": too_long})
+            result.add_error(row_num, too_long)
             continue
 
         existing = db.scalar(
@@ -283,19 +297,19 @@ def import_inspectors(db: Session, rows: list[tuple[int, dict[str, str]]]) -> Im
         password = row.get("password", "").strip()
         display_name = row.get("display_name", "").strip()
         if not username or not password or not display_name:
-            result.errors.append({"row": row_num, "message": "帳號、密碼、姓名皆為必填"})
+            result.add_error(row_num, "帳號、密碼、姓名皆為必填")
             continue
 
         too_long = _length_error(
             {"username": username, "display_name": display_name}, INSPECTOR_MAX_LENGTHS
         )
         if too_long:
-            result.errors.append({"row": row_num, "message": too_long})
+            result.add_error(row_num, too_long)
             continue
 
         has_permission, perm_err = _parse_permission(row.get("has_permission"))
         if perm_err:
-            result.errors.append({"row": row_num, "message": perm_err})
+            result.add_error(row_num, perm_err)
             continue
 
         existing = db.scalar(select(Inspector).where(Inspector.username == username))
