@@ -1581,8 +1581,14 @@ def admin_import_template(
     )
 
 
+# Deliberately a sync `def`, not `async def`. Everything this handler does is
+# blocking — openpyxl parsing, a DB round trip per row, and a bcrypt hash per
+# imported inspector (~0.3s each). On an `async def` that all runs *on the
+# event loop*, so a single import freezes every other request: no inspector in
+# the field could log in or submit a case until it finished. As a plain `def`,
+# Starlette runs it in the threadpool and the rest of the API stays responsive.
 @app.post("/api/admin/import/{import_type}")
-async def admin_import_excel(
+def admin_import_excel(
     import_type: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -1593,7 +1599,7 @@ async def admin_import_excel(
     if not filename.endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="僅支援 .xlsx 格式")
 
-    content = await file.read()
+    content = file.file.read()
     if not content:
         raise HTTPException(status_code=400, detail="上傳的檔案是空的")
 

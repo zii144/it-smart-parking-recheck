@@ -1,9 +1,12 @@
 """Admin Excel import: templates, bulk locations/inspectors, RBAC."""
 from __future__ import annotations
 
+import inspect
 import io
 
 from openpyxl import Workbook
+
+from app.main import admin_import_excel
 from tests.conftest import auth
 
 
@@ -15,6 +18,16 @@ def _build_xlsx(rows: list[list]) -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def test_import_endpoint_runs_off_the_event_loop():
+    """The handler must stay a sync `def` so Starlette runs it in the threadpool.
+
+    Its work is blocking (openpyxl parse, per-row DB commit, ~0.3s of bcrypt per
+    inspector). As an `async def` that would run on the event loop and stall
+    every other request for the whole import.
+    """
+    assert not inspect.iscoroutinefunction(admin_import_excel)
 
 
 def test_import_template_locations(client, sysadmin_token):
