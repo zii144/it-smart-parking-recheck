@@ -5,18 +5,28 @@
 # `docker compose down` (without -v). The database itself is the separate
 # `db` (PostgreSQL) service, selected via DATABASE_URL.
 
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+
 FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-# Upgrade packaging tooling first, not just app deps: python:3.11-slim ships
-# a stale setuptools/wheel with known CVEs in code that only matters when
-# installing packages (path traversal / arbitrary code execution via a
-# malicious tar/wheel file) — irrelevant at runtime, but real vulnerable
-# code sitting in the image, and Trivy correctly flags it.
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+# Only the installed *packages* come from the builder stage - not pip,
+# setuptools, wheel, or ensurepip's bundled fallback wheels. The app never
+# calls pip at runtime (docker-entrypoint.sh only runs alembic + uvicorn),
+# and upgrading pip/setuptools in place (previous approach) still leaves
+# real vulnerable code behind: ensurepip's bundled setuptools wheel and
+# pip's own vendored msgpack copy are untouched by `pip install --upgrade`
+# and Trivy correctly flags them too. Not shipping pip at all removes the
+# whole category, instead of chasing it version by version.
+COPY --from=builder /install /usr/local
+RUN rm -rf /usr/local/lib/python3.11/ensurepip
 
 COPY app ./app
 COPY alembic ./alembic
