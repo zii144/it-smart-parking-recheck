@@ -16,15 +16,18 @@
 # runbooks/phase-3-observability/02-deploy-uptime-kuma.md (sandbox project)
 # for the full reasoning.
 #
-# Pinned to the 1.x major (not 2.x): 2.x's stability/maturity wasn't judged
-# worth the risk for infra tooling with no other pin pressure forcing an
-# upgrade.
+# Pinned to the 2.x major. Was on 1.x initially, but 1.23.17 was the final
+# 1.x release (bug-fix-only line, no further features/security work) — moved
+# to 2.x on 2026-07-30, before this app went live, to eat the one-way DB
+# migration while there was no production monitoring history at stake.
+# Migration is irreversible (no v2-to-v1 downgrade path); if a future major
+# bump is needed, back up the kuma_data volume first.
 
 name: parking-monitoring
 
 services:
   uptime-kuma:
-    image: louislam/uptime-kuma:1
+    image: louislam/uptime-kuma:2
     container_name: uptime-kuma
     volumes:
       - kuma_data:/app/data

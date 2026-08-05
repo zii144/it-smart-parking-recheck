@@ -14,3 +14,12 @@ skills-lock.json
 deploy/.env.production
 target-sample/
 manual.zip
+
+# Personal work-tracking, local-only (see AIRules/progress_file_rules.md)
+progress/
+
+# Scratch planning docs, superseded by IMPLEMENTATION_LOG.md / devops_plan.md
+proposed_*.md
+
+# Local-only incident/bug log
+bugs.md

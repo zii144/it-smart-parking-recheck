@@ -23,7 +23,7 @@ No login required for the core flow. Open the URL in a mobile browser, then:
 This page is served as a static bundle from Cloudflare Pages — it contains **only** the
 inspector-facing code; the admin console's code is not present in this bundle at all (verified
 by build, not just hidden by a router). It talks to the backend over a separate public API
-endpoint at `https://parking-recheck.tail176472.ts.net`, reachable only for the specific routes
+endpoint at `https://parking-recheck.tarpon-gharial.ts.net`, reachable only for the specific routes
 inspectors need (login, ticket lookup, QR scan, case submission, health check, uploaded photos).
 Any other backend route, including everything under `/api/admin/*`, is unreachable from this
 path — the connection is dropped, not merely rejected.
@@ -45,8 +45,8 @@ showcase). Not exposed through Tailscale Funnel either (only the public inspecto
 (`192.168.122.13`) lives on a **NAT-only libvirt virtual network**, not the real office LAN
 (`192.168.1.0/24`). Only two kinds of machine can route to it today:
 1. The hypervisor host itself, or another VM colocated on the same virtual bridge.
-2. A device joined to the **Tailscale tailnet** (`tail176472`) that the VM is already a member
-   of (its tailnet address: `100.96.182.18`) — reachable over the mesh, *if* an ACL rule grants
+2. A device joined to the **Tailscale tailnet** (`tarpon-gharial`) that the VM is already a member
+   of (its tailnet address: `100.109.85.62`) — reachable over the mesh, *if* an ACL rule grants
    that device access. **No such ACL grant exists yet** — this is the intentionally-deferred
    design decision (Tailscale ACL vs. a VPN) mentioned below.
 
@@ -81,7 +81,7 @@ Compose services defined in `deploy/docker-compose.prod.yml`:
 | `frontend` | admin-only nginx + static bundle | `:8080` — only the hypervisor/colocated VMs today; see §2 |
 
 Plus, outside Docker/this repo's own compose stack but on the same VM:
-- **Tailscale**, joined to tailnet `tail176472`, running `tailscale funnel --bg 8090` — this is
+- **Tailscale**, joined to tailnet `tarpon-gharial`, running `tailscale funnel --bg 8090` — this is
   what makes `edge-proxy` (and therefore the public API) reachable from the internet.
 - **Uptime Kuma**, a separate Compose project (`deploy/monitoring/docker-compose.yml`, project
   name `parking-monitoring`, deployed at `/opt/monitoring` on the VM — deliberately isolated
@@ -156,7 +156,7 @@ Two separate build/deploy paths now — don't confuse them:
 cd production/frontend
 
 # Public (inspector) bundle -> Cloudflare Pages
-VITE_API_BASE="https://parking-recheck.tail176472.ts.net" npm run build:public
+VITE_API_BASE="https://parking-recheck.tarpon-gharial.ts.net" npm run build:public
 ./scripts/verify-build-split.sh dist/public   # must print PASS before deploying
 npx wrangler pages deploy dist/public --project-name=parking-recheck-public --branch=main
 
@@ -187,9 +187,9 @@ change reach the public site" as **no** by default unless this was actually run.
 # Expect: PASS: allow-list is fail-closed
 
 # From outside the network, over the real public path:
-curl -s -o /dev/null -w "%{http_code}\n" https://parking-recheck.tail176472.ts.net/api/health
+curl -s -o /dev/null -w "%{http_code}\n" https://parking-recheck.tarpon-gharial.ts.net/api/health
 # Expect: 200
-curl -s -o /dev/null -w "%{http_code}\n" https://parking-recheck.tail176472.ts.net/api/admin/stats
+curl -s -o /dev/null -w "%{http_code}\n" https://parking-recheck.tarpon-gharial.ts.net/api/admin/stats
 # Expect: 502 (Tailscale Funnel's HTTP-terminating relay translates the edge-proxy's raw
 # connection-drop into a 502 for internet clients — this is the correct signature at this layer,
 # not a bug; a 200 or 403 here would be the actual red flag)
@@ -198,7 +198,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://parking-recheck.tail176472.ts.n
 ### 3.5 Tailscale Funnel maintenance
 
 ```bash
-sudo tailscale status              # confirm still joined to tail176472
+sudo tailscale status              # confirm still joined to tarpon-gharial
 sudo tailscale funnel status        # confirm Funnel config is active (--bg persists across SSH sessions)
 sudo tailscale funnel --bg 8090     # re-enable if it ever shows "No serve config"
 ```
@@ -206,7 +206,32 @@ sudo tailscale funnel --bg 8090     # re-enable if it ever shows "No serve confi
 If `tailscale funnel` ever needs re-authenticating or re-enabling from scratch, expect two
 one-time human gates: `tailscale up` needs an interactive OAuth approval (opens a URL), and
 Funnel itself needs a one-time per-tailnet admin-console enable (the CLI prints a separate URL
-for this the first time). Both are one-time per tailnet, already done for `tail176472`.
+for this the first time). Both are one-time per tailnet, already done for `tarpon-gharial`.
+
+**If the Funnel hostname never becomes reachable from the internet** (DNS doesn't resolve, or TLS
+connections are dropped with no response) while `tailscale funnel status` looks correct on the VM,
+suspect a **half-provisioned tailnet** rather than anything on this host. That happened on
+2026-08-02: the tailnet had a published DNS zone and a valid cert, but Tailscale's Funnel ingress
+fleet never got a routing entry for it, so every external TLS connection was torn down after the
+ClientHello. No amount of node-side reconfiguration fixes this.
+
+The fix is to force a **new machine identity**, which makes the account issue a fresh tailnet:
+
+```bash
+sudo systemctl stop tailscaled
+sudo cp /var/lib/tailscale/tailscaled.state /var/lib/tailscale/tailscaled.state.bak-$(date +%Y%m%d%H%M%S)
+sudo rm -f /var/lib/tailscale/tailscaled.state && sudo rm -rf /var/lib/tailscale/certs
+sudo systemctl start tailscaled
+sudo tailscale up --hostname=parking-recheck    # interactive OAuth again
+sudo tailscale funnel --bg 8090
+```
+
+`tailscale logout` alone is **not** enough — it keeps the machine key in `tailscaled.state`, so the
+account hands back the same broken tailnet. Note this changes the tailnet domain, so the public
+API hostname changes too: rebuild and redeploy the public bundle (§3.3.1) and update this manual.
+
+Healthy Funnel provisioning is near-instant — DNS in seconds, ingress within about a minute. If
+it takes longer than a couple of minutes, treat that as a fault signal, not normal propagation.
 
 ### 3.6 Cloudflare Pages auth
 
