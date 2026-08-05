@@ -10,13 +10,19 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY requirements.txt .
-# Upgrade packaging tooling first, not just app deps: python:3.11-slim ships
-# a stale setuptools/wheel with known CVEs in code that only matters when
-# installing packages (path traversal / arbitrary code execution via a
-# malicious tar/wheel file) — irrelevant at runtime, but real vulnerable
-# code sitting in the image, and Trivy correctly flags it.
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+# Install deps, then remove all Python packaging tooling - pip, setuptools,
+# wheel, and ensurepip's bundled fallback wheels. The app never calls pip
+# at runtime (docker-entrypoint.sh only runs alembic + uvicorn). Upgrading
+# packaging tooling in place (the previous fix, d27892b) still leaves real
+# vulnerable code behind wherever `pip install --upgrade` doesn't reach:
+# ensurepip's bundled setuptools wheel, pip's own vendored msgpack,
+# setuptools' vendored jaraco.context, wheel's own code, etc. - each a
+# fresh Trivy finding as soon as the CVE feed catches up to whatever
+# version happened to ship. Removing the tooling outright, once, closes
+# the whole category instead of chasing it version by version.
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip uninstall -y pip setuptools wheel && \
+    rm -rf /usr/local/lib/python3.11/ensurepip
 
 COPY app ./app
 COPY alembic ./alembic
