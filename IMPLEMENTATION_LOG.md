@@ -908,3 +908,46 @@ the 60s following restart. Notable side observation: the live `cases` table has 
 ~4 weeks of real deployment — consistent with §10.1's 413 bug having silently blocked most real
 submissions with photos this entire time, which reframes today's fixes as considerably higher-
 impact than they looked evaluated individually.
+
+---
+
+## 12. Backend Dockerfile reconciled: `USER app` restored into git, promoted to the VM
+
+**2026-08-28, same day.** Closes §11.3's open item. Two Trivy-fix PRs landed on `main` today
+(#52, #53) that touched `production/backend/Dockerfile` and `prototype/backend/Dockerfile`, both
+deliberately *not* promoted to the VM at the time — the VM's actually-running Dockerfile (an
+older, pre-PR#50 revision) has `groupadd`/`useradd`/`USER app` non-root hardening the repo's
+current file didn't have, and blindly overwriting would have shipped a container running as root.
+
+Checked git history properly this time instead of assuming: `USER app` has **never once been
+committed to this repo**, at any point in `production/backend/Dockerfile`'s history back through
+d27892b (the first Trivy fix, Jul 27) — it was added by hand directly on the VM outside of git,
+exactly matching §1's original "the running build already had... non-root backend `USER app`...
+that neither this repo nor its git history has committed yet" finding from when this VM was first
+discovered. So this wasn't a regression to fix; it was a feature that was never captured in the
+first place.
+
+**Fix:** added the `groupadd`/`useradd`/`chown`/`USER app` block back into both Dockerfiles,
+placed after the app files are copied in (so `chown -R app:app /app` picks up everything),
+combined with the now-merged `apt-get upgrade`/pip-strip Trivy fixes. `docker-entrypoint.sh` only
+runs `alembic upgrade head` + `uvicorn` on port 8000 — confirmed neither needs root.
+
+**Verified before deploying anything:** built a throwaway image on the VM with the reconciled
+Dockerfile — build succeeds, `docker run --entrypoint whoami` → `app` (uid 999), `/app/data`
+correctly owned by `app:app`, core imports (fastapi/sqlalchemy/alembic/uvicorn) all work, and a
+full Trivy scan comes back completely clean (0 findings — the msgpack/setuptools finding from the
+earlier PR #53 investigation didn't reproduce this build, consistent with it having been a
+transient/non-deterministic build-isolation artifact rather than something this reconciliation
+needed to fix).
+
+**Deployed for real:** synced the reconciled `Dockerfile` to the VM (checksummed match before and
+after), rebuilt `backend` at the live tag (`af02ce4`), recreated the container — came up healthy
+on the first try this time, no drift-driven crash loop like §11.3. Confirmed: `whoami` inside the
+running container → `app`; `verify-allow-list.sh` still PASS; `/api/health` → 200; DB query
+sanity check (`cases` count) still works; no errors in logs since restart.
+
+**Committed properly this time** — `production/backend/Dockerfile` and
+`prototype/backend/Dockerfile` both now carry `USER app` in git, not just on the VM's disk. This
+closes the specific gap; the broader open question from §11.3 (why the VM's tree drifted as far
+as it did, and whether other "deploy one fix" sessions have been doing partial syncs) is still
+open and still worth a dedicated reconciliation session.
