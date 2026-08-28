@@ -7,6 +7,13 @@
 
 FROM python:3.11-slim
 
+# The base image's OS packages lag behind Debian's own security repo (e.g.
+# CVE-2026-14456, an OpenSSL DoS fixed upstream in libssl3t64 3.5.7 well
+# before this base image was last rebuilt). trixie-security is already
+# configured in the base image's sources.list, so this just pulls whatever
+# Debian has already published - no extra repo config needed.
+RUN apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt .
