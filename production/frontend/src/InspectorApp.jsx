@@ -332,11 +332,35 @@ export default function InspectorApp() {
                       district: t.district || d.district,
                       road: t.road || d.road,
                       spot_no: t.spot_no || d.spot_no,
+                      // A (re-)scan always starts a fresh per-ticket pipeline:
+                      // clear everything downstream so data tied to a
+                      // previously-scanned ticket can never survive into
+                      // 確認/判定/拍照/儲存. Without this, jumping back to 取得
+                      // via the step rail and scanning a *different* ticket
+                      // left ConfirmForm preferring the stale `fields` from
+                      // the first scan (see its `savedFields` priority) —
+                      // the inspector could submit the new ticket's photo and
+                      // location with the old ticket's billing data.
+                      fields: null,
+                      manualCorrected: false,
+                      originalValues: null,
+                      judgmentPreview: null,
+                      photo_base64: null,
+                      photo_filename: null,
                     }));
                     setStep("location");
                   }}
                   onManualFallback={() => {
-                    setDraft((d) => ({ ...d, scanResult: { status: "scan_failed", dataSource: "MANUAL_FROM_TICKET" } }));
+                    setDraft((d) => ({
+                      ...d,
+                      scanResult: { status: "scan_failed", dataSource: "MANUAL_FROM_TICKET" },
+                      fields: null,
+                      manualCorrected: false,
+                      originalValues: null,
+                      judgmentPreview: null,
+                      photo_base64: null,
+                      photo_filename: null,
+                    }));
                     setStep("location");
                   }}
                 />
