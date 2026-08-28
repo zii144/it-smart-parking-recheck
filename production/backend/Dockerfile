@@ -37,6 +37,16 @@ COPY alembic.ini .
 COPY docker-entrypoint.sh .
 RUN chmod +x docker-entrypoint.sh && mkdir -p /app/data
 
+# Run as a non-root user. This was previously only applied by hand directly
+# on the deployed VM, never actually committed here - see IMPLEMENTATION_LOG.md
+# §1 and the "sync the VM's backend Dockerfile" entry for the full story.
+# docker-entrypoint.sh only runs alembic + uvicorn on port 8000, neither of
+# which needs root.
+RUN groupadd --system app \
+    && useradd --system --gid app --no-create-home --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
+USER app
+
 # DATABASE_URL / JWT_SECRET / CORS_ALLOW_ORIGINS are provided by
 # docker-compose.yml. Without DATABASE_URL the app falls back to a local
 # SQLite file (dev convenience) - see app/config.py.
