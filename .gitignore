@@ -15,11 +15,18 @@ deploy/.env.production
 target-sample/
 manual.zip
 
-# Personal work-tracking, local-only (see AIRules/progress_file_rules.md)
+# Personal work-tracking, local-only (see AIRules/progress_file_rules.md) — the
+# overall log and dated weekly-done files, whether under progress/ or (as this
+# project keeps them) at the repo root.
 progress/
+progress-overall.md
+it-smart-parking-recheck-????-??-??.md
 
 # Scratch planning docs, superseded by IMPLEMENTATION_LOG.md / devops_plan.md
 proposed_*.md
+
+# Session handoff docs for continuation elsewhere — local-only, not app code
+HANDOFF_*.md
 
 # Local-only incident/bug log
 bugs.md
