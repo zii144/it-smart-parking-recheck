@@ -705,3 +705,206 @@ make the same irreversible migration much riskier. User agreed.
 **Not yet done:** repo changes (`docker-compose.yml`, this log entry) were written but not
 committed as of this session — do that before assuming the tracked file matches what's live
 on the VM long-term (it does match *right now*, just not in git history yet).
+
+---
+
+## 10. Log-driven incident sweep: 413s on inspector uploads, QR auto-fill dead since launch
+
+**2026-08-28.** User asked to check the live VM's logs for CRUD errors from external clients.
+Pulled `docker logs` from `parking-prod-edge-proxy-1` (public path) and `parking-prod-frontend-1`
+(LAN admin path) on `parking-recheck` (`192.168.122.13`), extracted the true client IP from
+`$http_x_forwarded_for` (Tailscale Funnel sets this — nginx's own `$remote_addr` is always the
+docker bridge gateway, `172.18.0.1`), filtered for POST/PUT/PATCH/DELETE with 4xx/5xx. Found two
+real, unrelated production bugs — both fixed and verified live in the same session.
+
+### 10.1 Inspector photo uploads 413'ing (public path only — admin CRUD was fine)
+
+**Root cause:** `deploy/edge-proxy/nginx.conf` (the public InspectorApp path, reverse-proxied
+through Tailscale Funnel) had no `client_max_body_size` directive, so it silently defaulted to
+nginx's compiled-in 1 MiB cap. `production/frontend/nginx.conf` (the internal admin path) already
+set `client_max_body_size 12m;` to match the backend's `MAX_UPLOAD_BYTES` (8 MiB decoded ≈ 11 MiB
+base64+JSON) — the edge-proxy config was just never brought in line when that admin-path fix was
+made. Log evidence: 6 external clients (iPhone/LINE, Android) got 413 on `POST /api/cases` on
+2026-08-28 alone, plus a cluster of unrelated `POST /api/login` 401s (bad-password attempts, one
+IP rate-limited) and bot/scanner noise (GPTBot, `Assetnote` pentest scanner) correctly 444'd by
+the fail-closed allow-list — that part was already working as designed.
+
+**Fix:** added `client_max_body_size 12m;` to `deploy/edge-proxy/nginx.conf`, matching the admin
+path. Shipped as [PR #51](https://github.com/zii144/it-smart-parking-recheck/pull/51) off
+`origin/main` (this session's local `main` checkout was stale — 48 commits behind, diverged on a
+now-superseded local-only `.gitignore` commit — so the fix branch was cut directly from
+`origin/main` and local `main` was later hard-reset to match).
+
+**Deployed and verified live** on the VM *before* the PR merged: rebuilt `parking-edge-proxy` at
+the already-running tag (`af02ce4`), recreated just that container (`docker compose up -d
+edge-proxy`, ~1s interruption to the public path only), then ran a full Playwright smoke test
+through the real public origin — `parking-recheck-public.pages.dev` (Cloudflare Pages) → Funnel →
+edge-proxy → backend — logging in as a throwaway inspector account, running the full 6-step case
+wizard, and uploading a 3.2 MB photo. `POST /api/cases` → `200`, file landed intact server-side.
+Confirmed `verify-allow-list.sh` still passes (no regression on the fail-closed behavior). Cleaned
+up the test case, its uploaded photo, and the throwaway inspector account afterward.
+
+PR merged same session (`429d803`). CI's Trivy image-scan check failed on that PR, but on a
+brand-new HIGH-severity OpenSSL CVE (`CVE-2026-14456`, `libssl3t64` in the backend image's Debian
+13 base layer, no fix in Debian's repos yet) — unrelated to this change (the PR never touches the
+backend image) and would fail identically on `main` right now. No branch protection is configured
+on `main`, so nothing technically blocked the merge; flagged as a separate open item rather than
+conflated with this fix.
+
+### 10.2 Real QR auto-fill has never worked in production
+
+**Root cause:** `deploy/.env.production` on the VM had `QR_QUERY_ALLOWED_HOSTS=` (empty). The
+backend's SSRF guard (`qr_service._is_allowed_url`) treats an empty allow-list as "real fetching
+disabled" *by design* — but nobody had circled back to actually populate it once the VM went
+public. Every real inspector QR scan hits `_resolve_url()` → allow-list check fails → immediate
+`scan_failed`, before any network call — 100% manual entry, unconditionally, since the VM first
+deployed (~2026-07-23, per §1). Separately, the frontend's hard-coded demo buttons (`QR-A1001`
+etc.) also always fail in prod, but *correctly* so — `QR_DEMO_MODE=false` in
+`docker-compose.prod.yml` is intentional (fake ticket numbers shouldn't resolve on a live system).
+
+**Diagnosis before touching anything:** confirmed DNS + HTTPS egress from the `backend` container
+to both `parkingfee.pma.gov.taipei` and `pay.taipei` work fine, then called
+`taipei_parkingfee.scrape()` directly inside the container (bypassing only the allow-list check)
+against the repo's own test-fixture ticket number, `Q7078443D090047` — full success against the
+*real* live government site: 車號 `CAP-6198`, 停車日期/時間 `2026-07-07 09:00–11:29`, 費率, 已繳
+金額 `50`. Scraper/parser/network path were all fine; the empty allow-list was the only blocker.
+
+**Fix:** backed up `deploy/.env.production` (`.env.production.bak.20260828142132`), set
+`QR_QUERY_ALLOWED_HOSTS=parkingfee.pma.gov.taipei,pay.taipei` (the code's own documented default —
+see `config.py`'s comment on the setting), recreated the `backend` container (env-only change, no
+image rebuild). This is a production behavior change (backend now makes live outbound fetches to
+two external hosts off untrusted QR-derived URLs, gated by the existing allow-list/redirect-pin/
+DNS-rebind guards in `qr_service.py`/`taipei_parkingfee.py`) — confirmed with the user before
+applying, not assumed.
+
+**Verified live**, two ways: (1) `qr_service.resolve()` called directly inside the container →
+`status: success` against the real site; (2) full Playwright run through the actual public UI —
+logged in as a second throwaway inspector, pasted the real QR URL
+(`https://parkingfee.pma.gov.taipei/qr?tno=Q7078443D090047`) into the "線上查詢" field, and the
+wizard auto-filled 帳單編號/車牌號碼/GPS and flipped 資料來源 to "QR 自動辨識" — the exact
+behavior that had been broken since launch. Didn't push this one through to an actual saved case
+(the save+photo path was already fully proven in §10.1's test, so a second one would've just been
+duplicate test data); deleted the throwaway inspector account afterward.
+
+**Not yet done:** this is a VM-local config change (`deploy/.env.production` is gitignored — see
+`.gitignore` — so there's nothing to commit/PR for it); nothing in git tracks that
+`QR_QUERY_ALLOWED_HOSTS` is now populated on the live VM besides this log entry and the `.bak`
+file sitting next to it. If the VM is ever rebuilt from `deploy/.env.production.example` instead
+of copied forward, this will silently regress back to disabled — worth promoting into the example
+file's own guidance, or otherwise making sure whoever rebuilds the VM knows to set it.
+
+---
+
+## 11. Multi-agent code audit → year-boundary judgement bug fixed → uncovered severe VM/repo drift → brief full outage → recovered
+
+**2026-08-28, same day as §10.** User asked for a multi-agent end-to-end audit (frontend/backend/
+db/security) of the whole stack. Four parallel agents (code + local test suite only, deliberately
+kept off the live VM to avoid concurrent SSH/docker access) reported back; consolidated findings
+below, then the two highest-confidence live-affecting ones were fixed same session.
+
+**Audit highlights** (full findings not reproduced here — see the four agents' reports in
+conversation history if this needs revisiting):
+- Backend: 172/172 tests passed, every route has coverage, zero migration/model drift *within the
+  repo*. One real bug found and reproduced directly against the code (see below).
+- Frontend: build/lint clean, `verify-build-split.sh` passes. Two HIGH bugs found: stale ticket
+  data surviving a mid-wizard re-scan, and no client-side photo compression (compounds §10.1 —
+  offline-queue localStorage quota and the edge-proxy body-size cap both still get hit by
+  uncompressed real phone photos). Not fixed this session — flagged for next pass.
+- DB: migration chain round-trips cleanly (fresh SQLite + fresh Postgres), but `0005`'s retroactive
+  `UNIQUE` constraint has no dedup guard (reproduced failure with pre-existing duplicate rows —
+  turned out to matter more than expected, see below). N+1 import pattern and an inconsistent
+  AdminUser-delete guard also flagged, not fixed.
+- Security: reported the edge-proxy's public listener never sets `X-Forwarded-For`, so the
+  backend's IP-based login throttle (`app/main.py` `_client_ip`) trusts an unvalidated header —
+  same finding independently reached by the backend agent. **Verified empirically before acting
+  on it** (see below) — it does not hold in this deployment's actual topology. Everything else
+  (bcrypt, JWT, RBAC, CORS, uploads, secrets) confirmed sound.
+
+### 11.1 XFF finding: real gap in the code, not exploitable in this deployment
+
+Before patching anything, sent a request through the *real* public Funnel path
+(`https://parking-recheck.tarpon-gharial.ts.net`) with a spoofed
+`X-Forwarded-For: 9.9.9.9, SPOOFTEST-...` header. Result: Tailscale Funnel discarded it outright
+and substituted its own determined client identity — confirmed by running the same probe from the
+VM itself (which showed up as the VM's own tailnet IP, `100.109.85.62`, not the spoofed value) and
+separately by triggering a real CORS-preflight `OPTIONS` request from a browser on the office LAN
+(logged XFF = `211.75.185.1`, the office's real public IP, matching `HANDOFF_dmz_rollout.md`'s
+independent note of that same IP from `curl ifconfig.me`). Both audit agents reasoned from static
+code only and concluded HIGH severity; the empirical test show it isn't reachable today, because
+`edge-proxy` is published `127.0.0.1`-only — the only path in is through Funnel, which already
+sanitizes this header. Applied the one-line `proxy_set_header X-Forwarded-For
+$proxy_add_x_forwarded_for;` fix anyway (all 5 location blocks in
+`deploy/edge-proxy/nginx.conf`) as cheap defense-in-depth against the topology ever changing, but
+downgraded and reported it to the user as non-urgent hardening, not a live vulnerability — worth
+remembering as a case where static analysis alone overstated exploitability and empirical
+verification against the real deployed system caught it before wasted effort.
+
+### 11.2 Year-boundary judgement bug — fixed, tested, deployed
+
+**Root cause** (backend agent's finding, reproduced independently): `business_rules.py`'s
+`compute_issue_datetime` infers the ticket's year from `parking_date` (ticket numbers only encode
+month/day/time). A ticket physically issued 23:58 on Dec 31 but entered/synced after midnight has
+`parking_date` already rolled to Jan 1 of the next year — the naive reconstruction then lands
+~365 days from the real `parking_start`, and a genuinely-compliant, 3-minutes-late ticket silently
+reads as **OVERDUE** with a nonsense multi-year diff, not even flagged as anomalous.
+
+**Fix:** `compute_issue_datetime` now takes an optional `parking_start` and, only when the naive
+(`parking_date.year`) result lands implausibly far away (> 48h), retries `year-1`/`year+1` and
+keeps whichever reconstruction lands closest to `parking_start`. Backward compatible — omitting
+`parking_start` (the `seed.py` call site) keeps the exact old behavior. Applied identically to
+`prototype/backend/app/business_rules.py` and `production/backend/app/business_rules.py` (were
+byte-identical before the change), plus the one call-site line in both `main.py` copies. Added 4
+new tests (`test_business_rules.py` x3 unit-level, `test_judgement_edge_cases.py` x1 integration-
+level hitting `/api/cases/preview`) to both `prototype/` and `production/` test trees. Full suites:
+176/176 (production) and equivalent count (prototype) pass, zero failures.
+
+### 11.3 Deploying the fix uncovered severe VM/repo drift — brief backend outage, recovered same session
+
+Copied the two changed files (`business_rules.py`, `main.py`) plus the nginx fix to the VM,
+rebuilt `backend`+`edge-proxy` at the already-running tag (`af02ce4`), recreated both containers —
+**`backend` crash-looped, full outage** (no admin or inspector API access at all) until resolved.
+Root cause was NOT the new code — it was pre-existing drift between the VM's raw-file-copy backend
+tree (see §1's original warning about this) and the actual repo, invisible until a rebuild forced
+Docker to re-read the VM's real (stale) source instead of reusing cached image layers:
+
+1. `alembic upgrade head` failed immediately: `Can't locate revision identified by
+   '0005_case_idx_loc_unique'` — the VM's `alembic/versions/` was missing that file entirely, even
+   though the *live database* was already stamped at that revision (applied at some point by a
+   build that had the file; the file itself never persisted on the VM's disk). Fixed by copying
+   the migration file back — no new DB changes needed, alembic just needed the file present to
+   resolve its history.
+2. Next failure: `ModuleNotFoundError: No module named 'app.import_service'` — also missing on the
+   VM entirely, despite being real, existing, tested code in the repo. `app/clock.py` missing too.
+   Copied both over.
+3. Next failure: `openpyxl`/`tzdata` weren't in the VM's `requirements.txt` (needed by the two
+   files just restored). Full-file diff showed the VM's copy was missing exactly those two
+   packages, nothing else — copied the whole file over.
+4. Next failure: `ImportError: cannot import name 'password_matches' from 'app.security'` — the
+   VM's `security.py` was missing the timing-safe login comparison entirely (the exact function
+   the security audit had just praised as "confirmed sound" — it *is* sound, in the repo; it just
+   was never deployed).
+5. At that point, stopped fixing one crash at a time and instead ran a full `md5sum` diff of every
+   backend file (`app/*.py`, `alembic/*`, `requirements*.txt`, `Dockerfile`) between the VM and the
+   repo in one pass. Found `config.py`, `models.py`, `rate_limit.py`, `security.py`, `seed.py` all
+   differed in content (`main.py`/`business_rules.py` already matched, from this session's own
+   sync). Copied all five in one batch, re-diffed to confirm zero remaining mismatches, rebuilt
+   once, restarted once — came up healthy on the first try.
+
+**Deliberately not touched:** the VM's `backend/Dockerfile` still differs from the repo's (the
+repo's was updated in PR #50's Trivy multi-stage-build fix, never promoted to the VM) — left alone
+to keep this recovery's blast radius contained to what was actually needed to get the stack
+healthy again. **Open item, not yet done:** promote the current `Dockerfile` to the VM the same
+deliberate way, and — more importantly — figure out *why* the VM's backend tree had drifted this
+far (six files + a migration, not just one or two) and whether prior "deploy this one fix" sessions
+have been silently doing partial syncs like this one almost did. Worth a dedicated session to fully
+reconcile the VM's `production/backend/` tree against `main` end-to-end rather than trusting
+spot-diffs going forward.
+
+**Verified recovered:** all 4 containers healthy; `verify-allow-list.sh` still PASS;
+`/api/health` → 200; the year-rollover fix confirmed live (`Q12318435D235800` / `parking_date
+2027-01-01` → `COMPLIANT`, 3.0 min diff, not OVERDUE); all 4 core tables (`cases`, `admin_users`,
+`inspectors`, `locations`) queryable with no ORM/schema mismatch; no errors in `backend` logs in
+the 60s following restart. Notable side observation: the live `cases` table has only 2 rows after
+~4 weeks of real deployment — consistent with §10.1's 413 bug having silently blocked most real
+submissions with photos this entire time, which reframes today's fixes as considerably higher-
+impact than they looked evaluated individually.
