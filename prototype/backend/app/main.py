@@ -485,7 +485,7 @@ def _run_judgement(db: Session, ticket_no: str, parking_date_str: str, parking_s
         parking_start = parking_start.replace(tzinfo=None)
 
     try:
-        issue_dt = rules.compute_issue_datetime(parking_date, parsed)
+        issue_dt = rules.compute_issue_datetime(parking_date, parsed, parking_start)
     except ValueError as exc:
         return None, f"帳單編號日期無效：{exc}"
 

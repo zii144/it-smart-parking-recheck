@@ -92,16 +92,56 @@ def parse_ticket_no(ticket_no: str) -> ParsedTicketNo:
     )
 
 
-def compute_issue_datetime(parking_date: date, parsed: ParsedTicketNo) -> datetime:
-    """年份取自停車日期，月日取自帳單編號，時分秒取自帳單編號"""
+# A ticket number encodes month/day/time but not year, so the year is
+# inferred from parking_date. That breaks across a year boundary: a ticket
+# physically issued right before midnight on Dec 31 but entered/synced after
+# midnight has parking_date already rolled to Jan 1 of the next year, which
+# puts the naively-reconstructed issue_datetime ~365 days from the real
+# parking_start — a genuinely-compliant ticket then reads as wildly OVERDUE
+# instead of looking anomalous. See IMPLEMENTATION_LOG.md for the writeup.
+_YEAR_ROLLOVER_SEARCH_THRESHOLD = timedelta(hours=48)
+
+
+def _issue_datetime_for_year(year: int, parsed: ParsedTicketNo) -> datetime:
     return datetime(
-        year=parking_date.year,
+        year=year,
         month=parsed.month,
         day=parsed.day,
         hour=parsed.hour,
         minute=parsed.minute,
         second=parsed.second,
     )
+
+
+def compute_issue_datetime(
+    parking_date: date,
+    parsed: ParsedTicketNo,
+    parking_start: datetime | None = None,
+) -> datetime:
+    """年份取自停車日期，月日取自帳單編號，時分秒取自帳單編號
+
+    When `parking_start` is given and the naive (parking_date.year) result
+    lands implausibly far from it (> 48h), that's very likely a year-boundary
+    artifact rather than a real anomaly: retry with year-1/year+1 and keep
+    whichever reconstruction lands closest to parking_start. Without
+    `parking_start`, or when the naive result is already plausible, behaviour
+    is unchanged.
+    """
+    naive = _issue_datetime_for_year(parking_date.year, parsed)
+    if parking_start is None:
+        return naive
+
+    best, best_gap = naive, abs(naive - parking_start)
+    if best_gap > _YEAR_ROLLOVER_SEARCH_THRESHOLD:
+        for year in (parking_date.year - 1, parking_date.year + 1):
+            try:
+                candidate = _issue_datetime_for_year(year, parsed)
+            except ValueError:
+                continue  # e.g. Feb 29 doesn't exist in the adjacent year
+            gap = abs(candidate - parking_start)
+            if gap < best_gap:
+                best, best_gap = candidate, gap
+    return best
 
 
 @dataclass
