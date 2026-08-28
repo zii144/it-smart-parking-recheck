@@ -39,6 +39,24 @@ def test_preview_tz_aware_parking_start_does_not_500(client, inspector_token):
     assert res.json()["judgement"] in ("COMPLIANT", "OVERDUE", "DATA_ERROR")
 
 
+def test_preview_new_year_rollover_is_compliant_not_wildly_overdue(client, inspector_token):
+    # Regression: a ticket issued 2026-12-31 23:58 but entered/synced after
+    # midnight (parking_date rolled to 2027-01-01) used to reconstruct the
+    # issue year straight from parking_date and land ~365 days off, silently
+    # misjudging a 3-minute-late, actually-compliant ticket as OVERDUE.
+    res = _preview(
+        client,
+        inspector_token,
+        ticket_no="Q12318435D235800",
+        parking_date="2027-01-01",
+        parking_start="2026-12-31T23:55:00",
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["judgement"] == "COMPLIANT"
+    assert abs(body["time_diff_minutes"] - 3.0) < 0.01
+
+
 def test_save_impossible_date_persists_as_parse_error_for_review(client, inspector_token):
     payload = {
         "ticket_no": IMPOSSIBLE_DATE_TICKET,
