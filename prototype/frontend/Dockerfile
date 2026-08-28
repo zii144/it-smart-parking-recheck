@@ -27,6 +27,11 @@ RUN npm run build:admin
 # ---- serve stage ----
 FROM nginx:1.30-alpine
 
+# The base image's OS packages lag behind Alpine's own repos (e.g.
+# CVE-2026-14456, an OpenSSL DoS fixed upstream in libcrypto3 3.5.8-r0 well
+# before this base image was last rebuilt).
+RUN apk update && apk upgrade --no-cache
+
 COPY --from=build /app/dist/admin /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
