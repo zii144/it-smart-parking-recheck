@@ -951,3 +951,74 @@ sanity check (`cases` count) still works; no errors in logs since restart.
 closes the specific gap; the broader open question from §11.3 (why the VM's tree drifted as far
 as it did, and whether other "deploy one fix" sessions have been doing partial syncs) is still
 open and still worth a dedicated reconciliation session.
+
+---
+
+## 13. Full-scale multi-role feature test → found the frontend drift was much worse than the backend's → full `production/frontend` resync → everything retested clean
+
+**2026-08-29.** User manually tested the map fix (§57/PR merge), reported it working, then asked
+for full-scale Playwright feature testing across all three roles (inspector/manager/sysadmin) to
+catch anything else like it. What started as chasing one small bug (admin case-search CSV export
+silently ignoring filters) turned up the answer to §11.3/§12's open question: **yes**, other
+"deploy one fix" sessions had been doing exactly the partial syncs those sections worried about —
+just on the frontend side this time, and far more extensively than the backend ever was.
+
+**How the export bug led to the real finding:** reproduced it live (exported with an unapplied
+filter typed in — CSV came back with *all* cases, not even the *last-applied* filter, contradicting
+the frontend audit's original theory). The React source (`CaseSearch.jsx`, `api.js`) looked
+correct — passes `filters` through to `toQueryString()` correctly. Diffing the *compiled* bundle
+actually running on the VM against fresh source found the deployed `downloadCsv` took zero
+arguments and built no query string at all — a completely different, older implementation.
+
+**Followed the same trail as §11.3, this time on `production/frontend`:** full checksum diff of
+every file (not just `src`/`public` — missed the root-level `.html` entry files on the first pass,
+caught it when the resulting test build failed to resolve `/src/admin-main.jsx`, which doesn't
+exist under that name; the real file is `src/main-admin.jsx`). Final count: **~30 of ~65 files
+differed, 8 were missing entirely** — `src/admin/components/ImportManager.jsx` (the whole bulk-
+import feature didn't exist on the VM), `src/main-admin.jsx`/`src/main-public.jsx` (VM still had a
+single pre-split `src/main.jsx`), `ErrorBoundary.jsx`, `AppLogo.jsx`, the entire `src/design/`
+directory, plus `admin.html`, `index.html`, `public.html` at the root. `api.js` was missing entire
+features present in the repo, not just the export-filter bug: **localStorage session persistence**
+(explains repeated re-logins during today's testing — chalked up to normal at the time) and
+request-timeout/abort handling.
+
+**Given the size, asked the user first** rather than repeating §11.3's just-go-fix-it approach
+unprompted — this was a much bigger blast radius (dependency file, build-config, and Dockerfile
+differences alongside the source drift). User confirmed: full sync, same rigor as the backend.
+
+**Synced, verified, deployed** — full `production/frontend` tree (this time genuinely complete:
+`src/`, `public/`, every root file, config files) checksummed clean before touching anything real;
+test-built in an isolated copy on the VM (build succeeded once the HTML entry files were included);
+confirmed the compiled bundle now contains the real `export.${format}${query}` call; Trivy scan
+clean; only then rebuilt and redeployed the live `frontend` container. Verified live: session
+persistence survives a reload now, CSV export correctly respects an applied filter (`?q=TESTQA` in
+the network request, matching row count in the file), `ImportManager` renders and actually imports
+(tested: fresh row added, re-import of the same row correctly skipped as duplicate).
+
+**Full-scale retest across all three roles after the resync**, all confirmed working correctly —
+manager: review-queue actions (all 5 outcomes covered: 資料錯誤/重複開單/需補充資料/確認異常/排除
+異常, each correctly transitions status or clears the queue), case edit-in-place, case delete with
+confirm dialog, search+filter (now genuinely filtering); sysadmin: inspector account CRUD including
+permission revoke, admin account CRUD including deactivate and the self-delete-disabled guard,
+location CRUD, the new bulk-import feature (add + dedup-skip both verified), settings update
+(temporarily bumped `overdue_threshold_minutes` 61→65 to prove the round-trip, then reverted to the
+real production value); inspector: duplicate-detection modal (shows the real existing case's
+location/creator/timestamp/status, matching the backend audit's documented cross-inspector
+disclosure), full offline-queue cycle (save while offline → queued locally with a pending-count
+badge → toggling back online auto-flushes and the case lands server-side with `synced_offline: 1`).
+Also empirically reconfirmed the exact-match role separation from the backend audit: `test_sysadmin`
+got `403` attempting a case-delete endpoint, matching "sysadmin cannot touch `/api/admin/cases*`" by
+design. All throwaway test accounts/cases/locations created during testing were cleaned up
+afterward; none of the user's own real accounts or cases were touched.
+
+**Nothing to commit to git for the sync itself** — the repo was already correct; only the VM's
+deployed artifact was stale, so this was a pure "deploy code that was already committed but never
+actually shipped" operation, same category as §10.2's QR allow-list fix.
+
+**Not yet done:** the backend and frontend drift instances found today (§11.3, this section) both
+point at the same root cause neither has actually been investigated yet — something about how past
+"promote this one fix" sessions reach the VM has been leaving the rest of the tree stale instead of
+doing a full sync. Worth figuring out *why* before it happens a third time on the next drift-prone
+subsystem (edge-proxy? monitoring stack?) — a full audit of every deployed tree against `main`,
+and possibly a change to however deploys are actually being done, so partial syncs stop being
+possible by construction rather than caught by accident each time.
